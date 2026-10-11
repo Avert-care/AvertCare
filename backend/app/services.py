@@ -96,10 +96,14 @@ def _get_qdrant_client():
 @lru_cache(maxsize=1)
 def _get_embedding_model():
     """Cached sentence-transformer — download once, reuse forever."""
-    from sentence_transformers import SentenceTransformer
-    model = SentenceTransformer("all-MiniLM-L6-v2")
-    logger.info("Embedding model loaded: all-MiniLM-L6-v2")
-    return model
+    try:
+        from sentence_transformers import SentenceTransformer
+        model = SentenceTransformer("all-MiniLM-L6-v2")
+        logger.info("Embedding model loaded: all-MiniLM-L6-v2")
+        return model
+    except Exception as exc:
+        logger.warning("Embedding model loading skipped or failed (%s).", exc)
+        return None
 
 
 @lru_cache(maxsize=1)
@@ -232,7 +236,7 @@ def _model_frame(payload: PatientEncounter) -> pd.DataFrame:
 
 @lru_cache(maxsize=1)
 def _get_safe_rag_index():
-    """Train-only embedding index. None when the safe index has not been built."""
+    """Train-only embedding index. None when missing or unreadable."""
     import os
 
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -241,14 +245,17 @@ def _get_safe_rag_index():
     meta_path = os.path.join(models_dir, "rag_train_meta.csv")
     if not (os.path.exists(index_path) and os.path.exists(meta_path)):
         return None
-    loaded = np.load(index_path)
-    embeddings = loaded["embeddings"].astype(np.float32)
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    embeddings = embeddings / np.clip(norms, 1e-8, None)
-    labels = loaded["labels"].astype(np.float32)
-    meta = pd.read_csv(meta_path)
-    logger.info("Loaded leakage-safe RAG index (%d training encounters).", len(labels))
-    return embeddings, labels, meta
+    try:
+        loaded = np.load(index_path)
+        embeddings = loaded["embeddings"]
+        labels = loaded["labels"].astype(np.float32)
+        cols = ["encounter_id", "age", "primary_diagnosis", "readmitted_binary", "interventions"]
+        meta = pd.read_csv(meta_path, usecols=cols)
+        logger.info("Loaded leakage-safe RAG index (%d training encounters).", len(labels))
+        return embeddings, labels, meta
+    except Exception as exc:
+        logger.warning("Could not load full RAG training index (%s); using fallback cohort.", exc)
+        return None
 
 
 def _rag_k(meta: dict | None) -> int:
@@ -285,45 +292,52 @@ def _calculate_relative_risk(raw_score: float) -> tuple[float, int]:
 
 def _safe_rag_retrieval(payload: PatientEncounter, k: int) -> TwinPatientResponse | None:
     """Neighborhood rate and twins from the training index only."""
-    index = _get_safe_rag_index()
-    if index is None:
+    try:
+        index = _get_safe_rag_index()
+        if index is None:
+            return None
+        embed_model = _get_embedding_model()
+        if embed_model is None:
+            return None
+        embeddings, labels, meta = index
+        note = build_discharge_note(_model_frame(payload).iloc[0].to_dict())
+        query = embed_model.encode(note, normalize_embeddings=True).astype(np.float32)
+        sims = embeddings @ query
+        k = max(1, min(int(k), len(labels)))
+        chosen = np.argpartition(-sims, k - 1)[:k]
+        chosen = chosen[np.argsort(-sims[chosen])]
+        chosen_sims = np.clip(sims[chosen], 0.0, 1.0)
+        weights = np.power(chosen_sims, 3)
+        sum_w = float(weights.sum())
+        if sum_w > 1e-6:
+            rate = round(float(np.sum(labels[chosen] * weights) / sum_w), 4)
+        else:
+            rate = round(float(labels[chosen].mean()), 4)
+        snri = round(min(max(rate * 1.5 + 0.05, 0.0), 1.0), 4)
+        twins = []
+        for idx in chosen[: settings.RAG_TOP_K]:
+            row = meta.iloc[int(idx)]
+            interventions = [part.strip() for part in str(row.get("interventions", "")).split("|") if part.strip()]
+            score = float(min(max(sims[idx], 0.0), 1.0))
+            twins.append(TwinPatient(
+                twin_id=str(int(row["encounter_id"])),
+                age=int(float(row["age"])),
+                primary_diagnosis=str(row["primary_diagnosis"]),
+                diagnosis_group=str(row["primary_diagnosis"]),
+                similarity_score=round(score, 4),
+                was_readmitted=bool(int(row["readmitted_binary"])),
+                successful_interventions=interventions,
+            ))
+        return TwinPatientResponse(
+            patient_id=payload.patient_id,
+            rag_readmission_rate=rate,
+            semantic_neighborhood_risk_index=snri,
+            sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
+            twins=twins,
+        )
+    except Exception as exc:
+        logger.warning("Safe RAG retrieval failed (%s); using fallback.", exc)
         return None
-    embeddings, labels, meta = index
-    note = build_discharge_note(_model_frame(payload).iloc[0].to_dict())
-    query = _get_embedding_model().encode(note, normalize_embeddings=True).astype(np.float32)
-    sims = embeddings @ query
-    k = max(1, min(int(k), len(labels)))
-    chosen = np.argpartition(-sims, k - 1)[:k]
-    chosen = chosen[np.argsort(-sims[chosen])]
-    chosen_sims = np.clip(sims[chosen], 0.0, 1.0)
-    weights = np.power(chosen_sims, 3)
-    sum_w = float(weights.sum())
-    if sum_w > 1e-6:
-        rate = round(float(np.sum(labels[chosen] * weights) / sum_w), 4)
-    else:
-        rate = round(float(labels[chosen].mean()), 4)
-    snri = round(min(max(rate * 1.5 + 0.05, 0.0), 1.0), 4)
-    twins = []
-    for idx in chosen[: settings.RAG_TOP_K]:
-        row = meta.iloc[int(idx)]
-        interventions = [part.strip() for part in str(row.get("interventions", "")).split("|") if part.strip()]
-        score = float(min(max(sims[idx], 0.0), 1.0))
-        twins.append(TwinPatient(
-            twin_id=str(int(row["encounter_id"])),
-            age=int(float(row["age"])),
-            primary_diagnosis=str(row["primary_diagnosis"]),
-            diagnosis_group=str(row["primary_diagnosis"]),
-            similarity_score=round(score, 4),
-            was_readmitted=bool(int(row["readmitted_binary"])),
-            successful_interventions=interventions,
-        ))
-    return TwinPatientResponse(
-        patient_id=payload.patient_id,
-        rag_readmission_rate=rate,
-        semantic_neighborhood_risk_index=snri,
-        sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
-        twins=twins,
-    )
 
 
 # ─────────────────────────────────────────────────────────────
