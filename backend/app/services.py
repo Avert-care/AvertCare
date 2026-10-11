@@ -993,10 +993,15 @@ def _generate_llm_care_plan(
             "a1c_result": a1c_result,
         })
 
-        response = client.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=f"{_LLM_SYSTEM_PROMPT}\n\nPatient Data:\n{user_payload}",
-        )
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                client.models.generate_content,
+                model=settings.GEMINI_MODEL,
+                contents=f"{_LLM_SYSTEM_PROMPT}\n\nPatient Data:\n{user_payload}",
+            )
+            response = future.result(timeout=3.0)
 
         raw = _gemini_text(response)
         if raw.startswith("```"):

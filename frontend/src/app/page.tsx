@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Activity, 
   AlertTriangle, 
@@ -340,6 +340,44 @@ export default function Dashboard() {
     setRagError(null);
   };
 
+  // Silently wake up the backend on page load so it's hot by the time the user clicks Analyze
+  useEffect(() => {
+    fetch(`${API_URL}/health`, { method: "GET" }).catch(() => {});
+  }, [API_URL]);
+
+  const fetchWithColdStartRetry = async (
+    url: string,
+    options: RequestInit,
+    stepLabel: string,
+    maxRetries = 3
+  ): Promise<Response> => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt > 1) {
+          setReviewStep(`Waking up cloud engine (cold start, attempt ${attempt}/${maxRetries})…`);
+        } else {
+          setReviewStep(stepLabel);
+        }
+        const res = await fetch(url, options);
+        // If Render is in cold boot cycle (502, 503, 504), wait and retry
+        if ((res.status === 502 || res.status === 503 || res.status === 504) && attempt < maxRetries) {
+          setReviewStep(`Cloud backend warming up (attempt ${attempt}/${maxRetries}, please wait)…`);
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          continue;
+        }
+        return res;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          setReviewStep(`Waking up cloud backend (attempt ${attempt}/${maxRetries}, please wait)…`);
+          await new Promise((resolve) => setTimeout(resolve, 3500));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw new Error("Cloud backend unavailable after retry");
+  };
+
   const handleAnalyze = async () => {
     if (noteTooShort) return;
 
@@ -360,15 +398,11 @@ export default function Dashboard() {
         num_prior_admissions: patient.number_inpatient,
       });
 
-      setReviewStep("Searching similar stays…");
-      const ragResult = await Promise.allSettled([
-        fetch(`${API_URL}/api/twin-patients`, { method: "POST", headers, body }),
-      ]).then((results) => results[0]);
-
-      setReviewStep("Scoring this discharge…");
-      const predictResult = await Promise.allSettled([
-        fetch(`${API_URL}/api/predict`, { method: "POST", headers, body }),
-      ]).then((results) => results[0]);
+      // Run predict and twin search concurrently with automated cold-start retry
+      const [predictResult, ragResult] = await Promise.allSettled([
+        fetchWithColdStartRetry(`${API_URL}/api/predict`, { method: "POST", headers, body }, "Scoring this discharge…"),
+        fetchWithColdStartRetry(`${API_URL}/api/twin-patients`, { method: "POST", headers, body }, "Searching similar stays…"),
+      ]);
 
       if (predictResult.status === "fulfilled") {
         const res = predictResult.value;
@@ -382,7 +416,7 @@ export default function Dashboard() {
         setPredictData(null);
         setPredictError(
           isHosted
-            ? "Cloud API warming up or unreachable. Please retry in a few seconds."
+            ? "Cloud engine is waking up from sleep. Please try once more in 5 seconds."
             : "The API is not reachable."
         );
       }
@@ -399,7 +433,7 @@ export default function Dashboard() {
         setRagData(null);
         setRagError(
           isHosted
-            ? "Cloud API warming up or unreachable. Please retry in a few seconds."
+            ? "Cloud engine is waking up from sleep. Please try once more in 5 seconds."
             : "The API is not reachable."
         );
       }

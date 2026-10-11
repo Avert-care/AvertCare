@@ -50,8 +50,10 @@ COPY --from=builder /root/.local /root/.local
 COPY app/ ./app/
 COPY models/ ./models/
 
-# PATH for pip --user installs
-ENV PATH=/root/.local/bin:$PATH
+# PATH for pip --user installs and memory safety flags
+ENV PATH=/root/.local/bin:$PATH \
+    LOW_MEMORY_MODE=true \
+    RENDER=true
 
 EXPOSE 8000
 
