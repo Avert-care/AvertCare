@@ -8,7 +8,13 @@ Provides synthetic patient queues for the active ward census workflow:
 
 from __future__ import annotations
 
-from app.schemas import AnalyzedRecord, PatientProfile
+from app.schemas import (
+    AnalyzedRecord,
+    PatientProfile,
+    PlanSource,
+    RiskCategory,
+    SHAPFeature,
+)
 
 # ─────────────────────────────────────────────────────────────
 # 5 Synthetic Diabetic Patients matching 34-column ML schema
@@ -380,9 +386,133 @@ PENDING_PATIENTS: list[PatientProfile] = [
 INITIAL_PENDING_PATIENTS: list[PatientProfile] = list(PENDING_PATIENTS)
 
 # ─────────────────────────────────────────────────────────────
-# Analyzed Queue (populated upon prediction)
-# ─────────────────────────────────────────────────────────────
-ANALYZED_PATIENTS: list[AnalyzedRecord] = []
+ANALYZED_PATIENTS: list[AnalyzedRecord] = [
+    AnalyzedRecord(
+        patient_id="PT-2918",
+        patient_name="Dorothy Gale",
+        discharge_time="Tomorrow, 11:30",
+        room_number="Room 104-B",
+        age=81,
+        primary_diagnosis="Type 2 Diabetes Mellitus with hypoglycemic syncope and mechanical fall",
+        time_in_hospital=7,
+        num_prior_admissions=4,
+        num_medications=18,
+        clinical_note=(
+            "81yo female admitted following acute hypoglycemic collapse at home. Severe polypharmacy with multiple "
+            "oral hypoglycemic agents and insulin. Caregiver fatigue reported by primary family contact."
+        ),
+        a1c_result=">8",
+        number_inpatient=4,
+        number_emergency=3,
+        number_diagnoses=12,
+        diabetes_med="Yes",
+        gender="Female",
+        discharge_disposition="3",
+        diag_1_group="Diabetes",
+        num_lab_procedures=71,
+        num_procedures=1,
+        number_outpatient=1,
+        admission_type_id="Emergency",
+        admission_source_id="Emergency_Room",
+        change="Ch",
+        diag_2_group="Circulatory",
+        diag_3_group="Respiratory",
+        max_glu_serum=">200",
+        medical_specialty="Emergency",
+        payer_code="Medicare",
+        race="Caucasian",
+        metformin="No",
+        repaglinide="No",
+        glimepiride="Down",
+        glipizide="No",
+        glyburide="Down",
+        pioglitazone="No",
+        rosiglitazone="No",
+        insulin="Steady",
+        risk_score=0.685,
+        risk_category=RiskCategory.HIGH,
+        care_plan=[
+            "Conduct pharmacist-led medication reconciliation before discharge.",
+            "Start a 72-hour post-discharge telehealth check-in.",
+            "Schedule a telephone follow-up within 7 days of discharge.",
+        ],
+        shap_features=[
+            SHAPFeature(feature="num__number_inpatient", impact=0.312),
+            SHAPFeature(feature="cat__discharge_disposition_id_3", impact=0.185),
+            SHAPFeature(feature="num__time_in_hospital", impact=0.094),
+            SHAPFeature(feature="num__num_medications", impact=0.082),
+        ],
+        sdoh_flags=["Polypharmacy risk (>=5 medications)", "Caregiver fatigue / isolation"],
+        clinical_rationale="Severe polypharmacy and frequent prior inpatient admissions elevate 30-day readmission risk significantly.",
+        plan_source=PlanSource.GEMINI,
+        cms_penalty_saved_usd=14200.0,
+        relative_risk_ratio=6.01,
+        risk_percentile=94,
+        analyzed_at="2026-10-11T18:00:00Z",
+    ),
+    AnalyzedRecord(
+        patient_id="PT-1042",
+        patient_name="Eleanor Vance",
+        discharge_time="Today, 14:00",
+        room_number="Room 412-A",
+        age=68,
+        primary_diagnosis="Type 2 Diabetes Mellitus with hyperosmolarity and chronic kidney disease stage 3",
+        time_in_hospital=6,
+        num_prior_admissions=2,
+        num_medications=14,
+        clinical_note=(
+            "Patient is a 68yo female admitted for uncontrolled hyperglycemia and acute renal insufficiency. "
+            "Lives alone on fixed income, reports difficulty affording basal insulin and frequent skipped meals."
+        ),
+        a1c_result=">8",
+        number_inpatient=2,
+        number_emergency=1,
+        number_diagnoses=9,
+        diabetes_med="Yes",
+        gender="Female",
+        discharge_disposition="1",
+        diag_1_group="Diabetes",
+        num_lab_procedures=58,
+        num_procedures=1,
+        number_outpatient=2,
+        admission_type_id="Emergency",
+        admission_source_id="Emergency_Room",
+        change="Ch",
+        diag_2_group="Circulatory",
+        diag_3_group="Genitourinary",
+        max_glu_serum=">300",
+        medical_specialty="Endocrinology",
+        payer_code="Medicare",
+        race="Caucasian",
+        metformin="No",
+        repaglinide="No",
+        glimepiride="No",
+        glipizide="No",
+        glyburide="No",
+        pioglitazone="No",
+        rosiglitazone="No",
+        insulin="Up",
+        risk_score=0.342,
+        risk_category=RiskCategory.MODERATE,
+        care_plan=[
+            "Refer to the hospital financial navigator for prescription cost assistance.",
+            "Arrange a daily wellness check because the patient lives alone.",
+            "Schedule a telephone follow-up within 7 days of discharge.",
+        ],
+        shap_features=[
+            SHAPFeature(feature="num__number_inpatient", impact=0.158),
+            SHAPFeature(feature="num__num_medications", impact=0.076),
+            SHAPFeature(feature="cat__a1c_result_>8", impact=0.065),
+        ],
+        sdoh_flags=["Financial distress / medication non-adherence risk", "Living alone"],
+        clinical_rationale="Financial barriers to medication adherence and kidney disease stage 3 increase readmission risk above population baseline.",
+        plan_source=PlanSource.GEMINI,
+        cms_penalty_saved_usd=None,
+        relative_risk_ratio=3.0,
+        risk_percentile=68,
+        analyzed_at="2026-10-11T18:30:00Z",
+    ),
+]
 
 
 def reset_mock_db() -> None:

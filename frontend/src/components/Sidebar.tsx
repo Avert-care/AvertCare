@@ -28,7 +28,7 @@ const navItems = [
     label: "Ward Census",
     description: "Pending Discharges",
     icon: Users,
-    badge: "5 Pending",
+    badge: "Live Queue",
   },
   {
     href: "/analyze",

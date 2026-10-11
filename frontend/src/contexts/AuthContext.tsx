@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from "firebase/auth";
 import { auth } from "../lib/firebase";
 
@@ -82,7 +82,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const getFreshToken = async (): Promise<string | null> => {
+  const getFreshToken = useCallback(async (): Promise<string | null> => {
     if (rawFirebaseUser) {
       try {
         // getIdToken(false) automatically refreshes if expired using the refresh token
@@ -98,9 +98,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return token || "dev-clinician-token";
     }
     return null;
-  };
+  }, [rawFirebaseUser, user, token]);
 
-  const loginDemo = (email: string = "doctor@avertcare.local") => {
+  const loginDemo = useCallback((email: string = "doctor@avertcare.local") => {
     const demoUser: ClinicianUser = {
       uid: "clinician-persisted-session",
       email,
@@ -114,9 +114,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch {
       // Ignore localStorage errors
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -130,7 +130,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(null);
     setRawFirebaseUser(null);
     setToken(null);
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, token, loginDemo, getFreshToken, logout }}>

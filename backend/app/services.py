@@ -1067,11 +1067,11 @@ _SDOH_KEYWORDS: dict[str, str] = {
     "shelter": "Housing instability",
 
     # Adherence & Polypharmacy
-    "polypharmacy": "Polypharmacy risk (≥5 medications)",
+    "polypharmacy": "Polypharmacy risk (>=5 medications)",
     "non-adherence": "Documented medication non-adherence",
     "nonadherence": "Documented medication non-adherence",
-    "skipping doses": "Medication non-adherence — skipping doses",
-    "missed doses": "Medication non-adherence — missed doses",
+    "skipping doses": "Medication non-adherence - skipping doses",
+    "missed doses": "Medication non-adherence - missed doses",
 }
 
 

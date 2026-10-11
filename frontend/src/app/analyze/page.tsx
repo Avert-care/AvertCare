@@ -603,20 +603,27 @@ function AnalyzeContent() {
               </span>
             </div>
 
-            <div className="flex gap-2 mb-6">
+            <div className="grid grid-cols-3 gap-2 mb-6">
               <button
                 type="button"
                 onClick={() => applyPreset(QUIET_DISCHARGE)}
-                className="flex-1 text-xs border border-slate-800 rounded-lg px-2.5 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors"
+                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
               >
-                Quiet discharge
+                Quiet Discharge
+              </button>
+              <button
+                type="button"
+                onClick={() => applyPreset(SAMPLE_CHART)}
+                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
+              >
+                Complex SDoH
               </button>
               <button
                 type="button"
                 onClick={() => applyPreset(HIGH_UTIL_DISCHARGE)}
-                className="flex-1 text-xs border border-slate-800 rounded-lg px-2.5 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors"
+                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
               >
-                High-utilization discharge
+                High-Utilizer
               </button>
             </div>
 
