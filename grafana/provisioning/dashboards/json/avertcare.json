@@ -1,8 +1,8 @@
 {
   "uid": "avertcare-mlops",
-  "title": "AvertCare Clinical Ops",
-  "description": "Live API health for the discharge-risk service: throughput, inference latency, and blocked versus successful requests.",
-  "tags": ["avertcare", "mlops", "clinical-ops"],
+  "title": "AvertCare Clinical Ops & Resource Performance",
+  "description": "Full-lifecycle observability for AvertCare: clinician onboarding, authentication health, clinical API performance, and container resource utilization.",
+  "tags": ["avertcare", "mlops", "clinical-ops", "ehr", "performance"],
   "schemaVersion": 39,
   "refresh": "5s",
   "timezone": "browser",
@@ -11,16 +11,70 @@
   "time": { "from": "now-15m", "to": "now" },
   "panels": [
     {
+      "id": 100,
+      "type": "row",
+      "title": "1. Executive KPI Overview & Service Health",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
       "id": 1,
       "type": "stat",
-      "title": "Requests Per Second",
-      "description": "Clinical API calls per second, excluding health probes and the metrics scrape.",
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "title": "Backend Service Status",
+      "description": "Prometheus active health probe against avertcare-backend:8000.",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
-          "expr": "sum(rate(fastapi_requests_total[1m]))",
+          "expr": "up{job=\"avertcare-backend\"}",
+          "legendFormat": "Health Status"
+        }
+      ],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OFFLINE", "color": "red" }, "1": { "text": "HEALTHY", "color": "green" } } }
+          ],
+          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 1, "color": "green" }] }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total Patient Evaluations",
+      "description": "Cumulative clinical discharge charts successfully scored by the ML engine.",
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(fastapi_requests_total{handler=~\"/api/predict.*\", status=\"200\"}) or vector(0)",
+          "legendFormat": "Charts Evaluated"
+        }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "thresholds": { "steps": [{ "value": null, "color": "blue" }] }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Current Request Throughput",
+      "description": "Clinical API calls per second across all routes.",
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(fastapi_requests_total[1m])) or vector(0)",
           "legendFormat": "RPS"
         }
       ],
@@ -29,23 +83,22 @@
         "defaults": {
           "unit": "reqps",
           "decimals": 2,
-          "color": { "mode": "thresholds" },
           "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 5, "color": "yellow" }, { "value": 20, "color": "red" }] }
         }
       }
     },
     {
-      "id": 2,
+      "id": 4,
       "type": "gauge",
-      "title": "P95 Latency",
-      "description": "95th percentile request time. The discharge plan should stay interactive.",
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "title": "P95 Clinical Latency",
+      "description": "95th percentile response time for inference and prescriptive care planning.",
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
           "refId": "A",
           "expr": "histogram_quantile(0.95, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000",
-          "legendFormat": "P95"
+          "legendFormat": "P95 Latency"
         }
       ],
       "fieldConfig": {
@@ -53,67 +106,129 @@
           "unit": "ms",
           "min": 0,
           "max": 2000,
-          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 500, "color": "yellow" }, { "value": 1000, "color": "red" }] }
-        }
-      }
-    },
-    {
-      "id": 3,
-      "type": "gauge",
-      "title": "P99 Latency",
-      "description": "99th percentile request time, including slow model or assistant calls.",
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "histogram_quantile(0.99, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000",
-          "legendFormat": "P99"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "ms",
-          "min": 0,
-          "max": 5000,
-          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 1000, "color": "yellow" }, { "value": 2500, "color": "red" }] }
-        }
-      }
-    },
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "API Up",
-      "description": "Prometheus can reach the backend metrics endpoint.",
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "up{job=\"avertcare-backend\"}",
-          "legendFormat": "up"
-        }
-      ],
-      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } }
-          ],
-          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 1, "color": "green" }] }
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 500, "color": "yellow" }, { "value": 1200, "color": "red" }] }
         }
       }
     },
     {
       "id": 5,
-      "type": "timeseries",
-      "title": "Inference Latency (P50 / P95 / P99)",
-      "gridPos": { "h": 9, "w": 14, "x": 0, "y": 5 },
+      "type": "gauge",
+      "title": "Auth & Clinical Error Rate",
+      "description": "Percentage of requests returning 4xx or 5xx.",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 1 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "refId": "A", "expr": "histogram_quantile(0.50, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P50" },
-        { "refId": "B", "expr": "histogram_quantile(0.95, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P95" },
-        { "refId": "C", "expr": "histogram_quantile(0.99, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P99" }
+        {
+          "refId": "A",
+          "expr": "((sum(rate(fastapi_requests_total{status=~\"4..|5..\"}[1m])) or vector(0)) / (sum(rate(fastapi_requests_total[1m])) > 0 or vector(1))) * 100",
+          "legendFormat": "Error Rate %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 5, "color": "yellow" }, { "value": 15, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "2. Clinician Onboarding, Authentication & Quality Gate Funnel",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Clinician Access Funnel: Authenticated vs Token Expired vs Validation Errors",
+      "description": "Real-time tracking of successful clinician calls (200 OK), unauthenticated/expired sessions (401 Unauthorized), and malformed patient charts (422 Unprocessable Entity).",
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(fastapi_requests_total{status=\"200\"}[1m])) or vector(0)", "legendFormat": "200: Authenticated & Scored" },
+        { "refId": "B", "expr": "sum(rate(fastapi_requests_total{status=\"401\"}[1m])) or vector(0)", "legendFormat": "401: Token Missing / Expired" },
+        { "refId": "C", "expr": "sum(rate(fastapi_requests_total{status=\"422\"}[1m])) or vector(0)", "legendFormat": "422: Chart Validation Rejected" },
+        { "refId": "D", "expr": "sum(rate(fastapi_requests_total{status=~\"5..\"}[1m])) or vector(0)", "legendFormat": "500: Server Exception" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2, "showPoints": "never", "spanNulls": true }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "200: Authenticated & Scored" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "401: Token Missing / Expired" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+          { "matcher": { "id": "byName", "options": "422: Chart Validation Rejected" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "yellow" } }] },
+          { "matcher": { "id": "byName", "options": "500: Server Exception" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "type": "gauge",
+      "title": "Onboarding & Auth Success Ratio",
+      "description": "Ratio of authenticated clinician actions against total attempts.",
+      "gridPos": { "h": 8, "w": 4, "x": 14, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum(rate(fastapi_requests_total{status=\"200\"}[5m])) or vector(0)) / (sum(rate(fastapi_requests_total[5m])) > 0 or vector(1))) * 100",
+          "legendFormat": "Success %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "thresholds": { "steps": [{ "value": null, "color": "red" }, { "value": 80, "color": "yellow" }, { "value": 95, "color": "green" }] }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "HTTP Status Mix (Clinician Traffic)",
+      "description": "Proportion of requests by HTTP response status code.",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(fastapi_requests_total[5m])) by (status)",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "options": {
+        "pieType": "donut",
+        "displayLabels": ["name", "percent"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 300,
+      "type": "row",
+      "title": "3. Clinical API Performance & Latency Quantiles",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Inference Latency Quantiles (P50, P90, P95, P99)",
+      "description": "Latency percentiles for clinical inference in milliseconds. P50 = median, P95 = SLA target, P99 = worst-case tail.",
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 15 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.50, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P50 (Median)" },
+        { "refId": "B", "expr": "histogram_quantile(0.90, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P90" },
+        { "refId": "C", "expr": "histogram_quantile(0.95, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P95" },
+        { "refId": "D", "expr": "histogram_quantile(0.99, sum(rate(fastapi_requests_duration_seconds_bucket[1m])) by (le)) * 1000", "legendFormat": "P99 (Tail)" }
       ],
       "fieldConfig": {
         "defaults": {
@@ -123,67 +238,99 @@
       }
     },
     {
-      "id": 6,
-      "type": "piechart",
-      "title": "HTTP Status Mix",
-      "description": "Successful predictions versus blocked or failed calls. A 401 means the Firebase token was missing or rejected.",
-      "gridPos": { "h": 9, "w": 10, "x": 14, "y": 5 },
-      "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(fastapi_requests_total[1m])) by (status)",
-          "legendFormat": "{{status}}"
-        }
-      ],
-      "options": {
-        "pieType": "donut",
-        "displayLabels": ["name", "percent"],
-        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
-        "reduceOptions": { "calcs": ["lastNotNull"] },
-        "tooltip": { "mode": "single" }
-      }
-    },
-    {
-      "id": 7,
+      "id": 10,
       "type": "timeseries",
-      "title": "Successful Calls vs Errors",
-      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 14 },
+      "title": "Throughput by Clinical Route",
+      "description": "Request volume comparing /api/predict (XGBoost + SHAP + Gemini) against /api/twin-patients (MiniLM Vector Retrieval).",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 15 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        { "refId": "A", "expr": "sum(rate(fastapi_requests_total{status=~\"2..\"}[1m]))", "legendFormat": "2xx success" },
-        { "refId": "B", "expr": "sum(rate(fastapi_requests_total{status=~\"4..|5..\"}[1m]))", "legendFormat": "4xx/5xx errors" }
+        { "refId": "A", "expr": "sum(rate(fastapi_requests_total[1m])) by (handler)", "legendFormat": "{{handler}}" }
       ],
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
           "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "showPoints": "never", "spanNulls": true }
-        },
-        "overrides": [
-          { "matcher": { "id": "byName", "options": "2xx success" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
-          { "matcher": { "id": "byName", "options": "4xx/5xx errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
-        ]
+        }
       }
     },
     {
-      "id": 8,
-      "type": "bargauge",
-      "title": "Error Rate by Status",
-      "description": "4xx and 5xx responses per second, split by status code.",
-      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 14 },
+      "id": 400,
+      "type": "row",
+      "title": "4. Container Hardware & Runtime Resource Utilization",
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Python Process Memory Utilization (RAM)",
+      "description": "Memory footprint of the FastAPI inference engine. Resident Memory represents physical RAM occupied by NumPy, XGBoost, and SHAP trees.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
-        {
-          "refId": "A",
-          "expr": "sum(rate(fastapi_requests_total{status=~\"4..|5..\"}[1m])) by (status)",
-          "legendFormat": "{{status}}"
-        }
+        { "refId": "A", "expr": "process_resident_memory_bytes{job=\"avertcare-backend\"}", "legendFormat": "Resident RAM (RSS)" },
+        { "refId": "B", "expr": "process_virtual_memory_bytes{job=\"avertcare-backend\"}", "legendFormat": "Virtual Memory (VMS)" }
       ],
-      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"] }, "showUnfilled": true },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps",
-          "thresholds": { "steps": [{ "value": null, "color": "yellow" }, { "value": 1, "color": "red" }] }
+          "unit": "bytes",
+          "custom": { "drawStyle": "line", "fillOpacity": 15, "lineWidth": 2, "showPoints": "never", "spanNulls": true }
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "Inference Engine CPU Load",
+      "description": "CPU percentage consumed by Python runtime during XGBoost predictions and vector calculations.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "rate(process_cpu_seconds_total{job=\"avertcare-backend\"}[1m]) * 100", "legendFormat": "CPU Load %" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "showPoints": "never", "spanNulls": true }
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "gauge",
+      "title": "System File Descriptors in Use",
+      "description": "Open file descriptors vs operating system ceiling.",
+      "gridPos": { "h": 8, "w": 4, "x": 16, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "process_open_fds{job=\"avertcare-backend\"}", "legendFormat": "Open FDs" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1024,
+          "thresholds": { "steps": [{ "value": null, "color": "green" }, { "value": 256, "color": "yellow" }, { "value": 512, "color": "red" }] }
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "Python Garbage Collector Velocity",
+      "description": "Rate of memory cleanup cycles per minute across GC generations 0, 1, and 2.",
+      "gridPos": { "h": 8, "w": 4, "x": 20, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(python_gc_collections_total{job=\"avertcare-backend\"}[1m])) by (generation)", "legendFormat": "Gen {{generation}}" }
+      ],
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "color": { "mode": "palette-classic" }
         }
       }
     }
