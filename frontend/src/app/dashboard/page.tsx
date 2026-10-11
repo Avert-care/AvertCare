@@ -3,20 +3,13 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  Users,
-  ShieldAlert,
-  Stethoscope,
   Activity,
   ArrowRight,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
   Bed,
-  Clock,
-  Sparkles,
-  Hospital,
   ChevronRight,
   RefreshCw,
+  ShieldAlert,
+  Users,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiBaseUrl, prewarmBackend } from "@/lib/api";
@@ -113,7 +106,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Primary KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Pending Discharges */}
         <Link
           href="/pending"
@@ -178,27 +171,6 @@ export default function DashboardPage() {
             <ChevronRight className="w-3.5 h-3.5" />
           </div>
         </Link>
-
-        {/* AI & ML Engine Status */}
-        <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-400">Clinical AI Stack</span>
-            <div className="p-2.5 bg-purple-500/10 text-purple-400 rounded-xl border border-purple-500/20">
-              <Sparkles className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 space-y-1">
-            <div className="text-xs flex items-center gap-1.5 text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5" /> XGBoost 2.1 Inference
-            </div>
-            <div className="text-xs flex items-center gap-1.5 text-cyan-400 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5" /> TreeSHAP Explainability
-            </div>
-            <div className="text-xs flex items-center gap-1.5 text-purple-400 font-semibold">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Gemini 3.8 Care Plans
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Two-Column Clinical Feed */}
