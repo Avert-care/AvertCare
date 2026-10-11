@@ -62,6 +62,16 @@ class PatientEncounter(BaseModel):
         return v.strip()
 
 
+class PatientProfile(PatientEncounter):
+    """Extended patient encounter including ward demographics and discharge schedule."""
+
+    patient_name: str = Field(default="Anonymous Patient", description="Full name of patient")
+    discharge_time: str = Field(default="Today, 14:00", description="Scheduled discharge time")
+    planned_discharge_time: str = Field(default="Today, 14:00", description="Scheduled discharge time")
+    room_number: str = Field(default="Room 302", description="Assigned ward room")
+
+
+
 # ─────────────────────────────────────────────────────────────
 # Predict Endpoint Response
 # ─────────────────────────────────────────────────────────────
@@ -94,6 +104,27 @@ class PredictResponse(BaseModel):
     cms_penalty_saved_usd: float | None = Field(default=None, description="Estimated CMS penalty avoidance in USD. Null unless risk is high.")
     relative_risk_ratio: float | None = Field(default=None, description="Ratio of patient risk to population baseline (11.4%)")
     risk_percentile: int | None = Field(default=None, description="Estimated risk percentile among hospital discharges (0-100)")
+
+
+class AnalyzedRecord(PatientProfile):
+    """Combines patient encounter and ward info with inference results, risk score, and care plan."""
+
+    risk_score: float = Field(..., ge=0.0, le=1.0, description="Readmission probability [0, 1]")
+    risk_category: RiskCategory = Field(default=RiskCategory.MODERATE, description="Risk category tier")
+    care_plan: list[str] = Field(default_factory=list, description="Recommended discharge interventions")
+    shap_features: list[SHAPFeature] = Field(default_factory=list, description="Top SHAP feature drivers")
+    sdoh_flags: list[str] = Field(default_factory=list, description="Social determinants of health flags")
+    clinical_rationale: str = Field(default="", description="Clinician rationale summary")
+    plan_source: PlanSource = Field(default=PlanSource.RULES, description="Source of recommendations (gemini or rules)")
+    cms_penalty_saved_usd: float | None = Field(default=None, description="Estimated CMS penalty avoidance in USD")
+    relative_risk_ratio: float | None = Field(default=None, description="Ratio of risk to baseline")
+    risk_percentile: int | None = Field(default=None, description="Risk percentile among discharges")
+    analyzed_at: str | None = Field(default=None, description="Timestamp of analysis")
+
+
+# Alias for backwards/semantic compatibility
+AnalyzedPatient = AnalyzedRecord
+
 
 
 # ─────────────────────────────────────────────────────────────

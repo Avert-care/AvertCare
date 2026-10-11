@@ -110,3 +110,50 @@ class TestTwinPatientEndpoint:
 class TestXgbBaseScore:
     def test_strips_list_wrapping_so_shap_can_parse_it(self):
         assert _plain_base_score("[1.1387802E-1]") == float("1.1387802E-1")
+
+
+# ─────────────────────────────────────────────────────────────
+class TestWardCensusEndpoints:
+    def test_get_pending_patients_returns_200(self):
+        r = client.get("/api/patients/pending")
+        assert r.status_code == 200
+        patients = r.json()
+        assert len(patients) >= 5
+        assert "patient_id" in patients[0]
+        assert "patient_name" in patients[0]
+        assert "discharge_time" in patients[0]
+
+    def test_get_patient_by_id_returns_200(self):
+        # Fetch first pending patient ID
+        pending = client.get("/api/patients/pending").json()
+        first_id = pending[0]["patient_id"]
+        r = client.get(f"/api/patients/{first_id}")
+        assert r.status_code == 200
+        assert r.json()["patient_id"] == first_id
+        assert r.json()["patient_name"] == pending[0]["patient_name"]
+
+    def test_get_patient_by_id_404_on_unknown(self):
+        r = client.get("/api/patients/UNKNOWN-999")
+        assert r.status_code == 404
+
+    def test_predict_and_analyzed_queue(self):
+        # Initial analyzed count
+        initial_analyzed = client.get("/api/patients/analyzed").json()
+
+        # Run prediction on a pending patient
+        pending = client.get("/api/patients/pending").json()
+        target = pending[0]
+        r_pred = client.post("/api/predict", json=target)
+        assert r_pred.status_code == 200
+        pred_data = r_pred.json()
+
+        # Check analyzed queue
+        r_analyzed = client.get("/api/patients/analyzed")
+        assert r_analyzed.status_code == 200
+        analyzed_list = r_analyzed.json()
+        assert len(analyzed_list) >= len(initial_analyzed)
+
+        # Check sorting by risk_score descending
+        scores = [item["risk_score"] for item in analyzed_list]
+        assert scores == sorted(scores, reverse=True)
+
