@@ -50,11 +50,17 @@ def _install_shap_base_score_patch() -> None:
     Rewriting the booster config does not stick: the next save writes the brackets
     back. The decode step is the one SHAP actually uses, so the number is unwrapped there.
     """
-    import shap.explainers._tree as tree
+    try:
+        import shap.explainers._tree as tree  # type: ignore[import-untyped]
+    except Exception as exc:
+        logger.debug("SHAP base score patch skipped: %s", exc)
+        return
 
     if getattr(tree, "_avertcare_base_score", False):
         return
-    original = tree.decode_ubjson_buffer
+    original = getattr(tree, "decode_ubjson_buffer", None)
+    if original is None:
+        return
 
     def decode_ubjson_buffer(fp):
         model = original(fp)
