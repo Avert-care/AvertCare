@@ -44,6 +44,8 @@ class Settings(BaseSettings):
     LIVE_RAG_ENABLED: bool = False
     # Flip to True once GEMINI_API_KEY is set.
     LIVE_LLM_ENABLED: bool = False
+    # Low-memory cloud mode (auto-detected on Render, Railway, or when LOW_MEMORY_MODE=true)
+    LOW_MEMORY_MODE: bool = False
 
 
 settings = Settings()
