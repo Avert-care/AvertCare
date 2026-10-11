@@ -1,292 +1,213 @@
-# AvertCare — Project Architecture & File Reference
+# AvertCare — Production Architecture & Engineering Reference
 
-> **For new developers.** This document explains the purpose of every file and folder in the `AvertCare` repository, the system architecture, and the data flow from raw patient input to prescriptive clinical output.
+> **Executive Overview**  
+> AvertCare is a production-grade, loosely coupled **Prescriptive Clinical Decision Support System (CDSS)** designed for diabetic discharge management. Unlike black-box diagnostic models that only output a risk percentage, AvertCare predicts 30-day readmission risk, isolates individual patient drivers via TreeSHAP, surfaces historical "twin patient" cohorts, and synthesizes an actionable, 3-step discharge care plan powered by Google Gemini.
 
 ---
 
-## 🧭 System Architecture Overview
+## 🧭 1. High-Level System Architecture
+
+AvertCare operates across a dual topology: a **Cloud Production Tier** (for zero-install judge access) and a **Local Containerized Stack** (for full offline MLOps observability).
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         CLINICIAN'S BROWSER                          │
-│                    http://localhost:3000                              │
-│                      Next.js 16 Dashboard                            │
-│  Login → Firebase Auth JWT → Attach Bearer token to every API call  │
-└─────────────────────┬────────────────────────────────────────────────┘
-                      │ HTTPS / Bearer Token
-                      ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│                    FASTAPI BACKEND  :8000                            │
-│  POST /api/predict        POST /api/twin-patients                    │
-│  ┌─────────────────────────────────────────────────────────────────┐ │
-│  │  auth.py → verify Firebase JWT                                  │ │
-│  │  services.py → _get_ml_artifacts()                              │ │
-│  │    ├── preprocessor.joblib (ColumnTransformer)                  │ │
-│  │    ├── best_model.joblib   (RF_RAG classifier)                  │ │
-│  │    └── feature_names.json                                       │ │
-│  │  services.py → run_rag_retrieval()                              │ │
-│  │    └── Qdrant :6333 → top-3 similar past patients               │ │
-│  │  services.py → _generate_llm_care_plan()                        │ │
-│  │    └── Gemini 2.0 Flash → 3-point discharge plan                │ │
-│  └─────────────────────────────────────────────────────────────────┘ │
-└────────────────────┬─────────────────────────────────────────────────┘
-         ┌───────────┴───────────┐
-         ▼                       ▼
-┌─────────────────┐   ┌──────────────────────────┐
-│  Qdrant :6333   │   │  Redis :6379              │
-│  Vector DB      │   │  (Caching / Rate Limit)   │
-│  clinical_cases │   └──────────────────────────┘
-│  collection     │
-└─────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                    PRESENTATION TIER                                        │
+│                                                                                             │
+│  [Cloud] Vercel Edge: https://avert-care.vercel.app                                         │
+│  [Local] Docker Desktop: http://localhost:3000                                              │
+│                                                                                             │
+│  Next.js 16 (App Router) • TypeScript • Tailwind CSS v4 • Epic EHR Dark-Mode Aesthetic     │
+│  Authentication: Firebase Auth (Client SDK) + Persistent Clinician Demo Bypass              │
+└──────────────────────────────────────────────┬──────────────────────────────────────────────┘
+                                               │ HTTPS / Bearer Token
+                                               ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   APPLICATION & INFERENCE TIER                              │
+│                                                                                             │
+│  [Cloud] Render Web Service: https://avertcare.onrender.com                                 │
+│  [Local] Docker Container: avertcare-backend (Port 8000)                                    │
+│                                                                                             │
+│  FastAPI (Uvicorn) • Pydantic v2 • Prometheus Instrumentator                                │
+│                                                                                             │
+│  ┌─────────────────────────┐  ┌───────────────────────────┐  ┌───────────────────────────┐  │
+│  │     Authentication      │  │     Clinical Scoring      │  │    Prescriptive GenAI     │  │
+│  │   Firebase Admin SDK    │  │   XGBoost Depth-6 Model   │  │   Gemini 2.0 Flash /      │  │
+│  │  JWT Token Verification │  │   TreeSHAP Attributions   │  │   Rule-Based Fallback     │  │
+│  └─────────────────────────┘  └───────────────────────────┘  └───────────────────────────┘  │
+└──────────────┬───────────────────────────────┬───────────────────────────────┬──────────────┘
+               │                               │                               │
+               ▼                               ▼                               ▼
+┌──────────────────────────────┐┌──────────────────────────────┐┌──────────────────────────────┐
+│       VECTOR RETRIEVAL       ││      IN-MEMORY CACHE         ││        OBSERVABILITY         │
+│                              ││                              ││                              │
+│ [Primary] Local NumPy Index  ││ Redis 7 Alpine (Port 6379)   ││ Prometheus (Port 9090)       │
+│  MiniLM Embeddings (384-dim) ││  • Twin Query Result Cache   ││  • fastapi_requests_total    │
+│  rag_train_index.npz         ││  • Gemini Quota Rate Limiter ││  • inference_duration_seconds│
+│                              ││  • Distributed Session Store ││ Grafana (Port 3001)          │
+│ [Cloud] Qdrant Cloud Cluster ││                              ││  • P95/P99 Latency & RPS     │
+│  10,000 Patient Vectors      ││                              ││  • Error Rate Monitoring     │
+└──────────────────────────────┘└──────────────────────────────┘└──────────────────────────────┘
+```
+
+---
+
+## 🔄 2. End-to-End Clinical Data Flow
+
+Every clinical review progresses through an orchestrated, 7-stage pipeline:
+
+```
+1. CLINICIAN INPUT
+   Clinician loads a diabetic discharge chart on Next.js UI (or selects a pre-configured preset).
+   Chart contains: Demographics, stay length, diagnostic ICD-9 groups, HbA1c status, meds, and discharge note.
          │
          ▼
-┌──────────────────────────────────────────────────────────────────────┐
-│              PROMETHEUS :9090  →  GRAFANA :3001                      │
-│  /metrics endpoint → time-series → ops dashboard                    │
-└──────────────────────────────────────────────────────────────────────┘
+2. SECURITY & AUTHENTICATION
+   Client attaches Firebase Auth JWT (or dev-clinician-token) via Authorization: Bearer <token>.
+   Backend validates token via Firebase Admin SDK in backend/app/core/auth.py.
+         │
+         ▼
+3. TWIN ENCOUNTER RETRIEVAL (Leakage-Safe RAG)
+   backend/app/note_template.py generates a clinical observation summary from discharge-time variables.
+   backend/app/services.py embeds text via sentence-transformers/all-MiniLM-L6-v2 (384-dim).
+   Vector index queries training encounters only (rag_train_index.npz), calculating:
+   → rag_readmit_rate_k10 (historical readmission rate of the 10 most similar diabetic twins).
+         │
+         ▼
+4. PREPROCESSING & FEATURE PIPELINE
+   Structured chart + rag_readmit_rate are passed through preprocessor.joblib (ColumnTransformer):
+   - Numerical: Imputed with median and scaled via StandardScaler.
+   - Categorical: One-Hot Encoded with handle_unknown='ignore'.
+   - Result: Dense 147-dimensional clinical feature vector.
+         │
+         ▼
+5. MACHINE LEARNING INFERENCE
+   best_model.joblib (XGBoost Depth-6 Unweighted) calculates calibrated readmission probability.
+   - High Risk: Probability >= 0.20 (Top ~9% of hospital discharges, precision ~29%).
+   - Moderate Risk: Probability between 0.12 and 0.20.
+   - Low Risk: Probability < 0.12.
+   - Relative Risk Ratio: Calculated relative to hospital baseline (11.4%).
+         │
+         ▼
+6. EXPLAINABILITY & SOCIAL DETERMINANTS (SDoH)
+   - TreeSHAP computes exact marginal feature attributions for top clinical drivers.
+   - Pattern-based SDoH extraction scans clinical note for social isolation, transportation,
+     housing instability, and medication copay distress.
+         │
+         ▼
+7. PRESCRIPTIVE CARE PLAN GENERATION
+   - If LIVE_LLM_ENABLED=true: Prompt containing risk score, top 3 SHAP drivers, twin interventions,
+     and SDoH flags is sent to Google Gemini 2.0 Flash. Gemini returns a tailored 3-step action plan.
+   - Fallback: Deterministic rule engine triggers specific clinical protocols (e.g., ordering HbA1c if unmeasured).
+   - Result returned to Next.js dashboard as PredictResponse JSON.
 ```
 
 ---
 
-## 📁 Root Directory
-
-| File / Folder | Purpose |
-|---|---|
-| `docker-compose.yml` | **Universal setup** — one file brings up all 6 services. Volume mounts ensure every developer shares the same ML artifacts and observability stack. |
-| `WALKTHROUGH.md` | High-level project summary, feature flags, and setup instructions. |
-| `ARCHITECTURE.md` | This file — detailed developer reference for every file and folder. |
-| `FIREBASE_SETUP.md` | Step-by-step guide for manually initialising the Firebase project. |
-| `README.md` | GitHub landing page — project overview and quick-start badge. |
-| `.gitignore` | Excludes `.env`, `.venv/`, `__pycache__/`, `.pkl`/`.pt` large binaries. |
-| `.github/workflows/deploy.yml` | GitHub Actions CI/CD: lint → test → build Docker image → push to GHCR. |
-
----
-
-## 📁 `backend/` — FastAPI Inference Server
-
-The FastAPI application that sits between the Next.js frontend and the ML models / Qdrant vector store.
-
-### `backend/Dockerfile`
-Multi-stage build:
-1. **builder** stage: installs C-extension deps (shap, scikit-learn, numpy) with `gcc`.
-2. **runner** stage: lean runtime image with only the compiled packages and app source.
-
-### `backend/requirements.txt`
-All Python runtime dependencies pinned to exact versions for reproducible builds across the team. Key packages:
-- `fastapi`, `uvicorn` — API server
-- `firebase-admin` — JWT verification
-- `qdrant-client` — vector search
-- `sentence-transformers` — clinical note embedding
-- `scikit-learn`, `shap`, `pandas`, `numpy` — ML inference
-- `google-genai` — Gemini LLM
-- `prometheus-fastapi-instrumentator` — `/metrics` endpoint
-
-### `backend/.env` / `backend/.env.example`
-Runtime configuration. Never committed. `.env.example` is the template every team member copies and fills in. Key variables:
-- `FIREBASE_PROJECT_ID` — enables JWT auth; blank = dev bypass mode
-- `GEMINI_API_KEY` — enables Gemini care plan generation
-- `LIVE_RAG_ENABLED` — switches from mock to live Qdrant retrieval
-- `LIVE_LLM_ENABLED` — switches from rule-based to Gemini care plan
-
-### `backend/app/main.py`
-FastAPI application factory. Wires together:
-- CORS middleware (allows `localhost:3000` and Vercel)
-- Prometheus instrumentation (auto-exposes `/metrics`)
-- API router
-- `/health` and `/` probe endpoints
-
-### `backend/app/schemas.py`
-Pydantic v2 data models for all request/response types. Follows HL7 FHIR Encounter structure. Key types:
-- `PatientEncounter` — inbound payload (age, diagnoses, clinical note, etc.)
-- `PredictResponse` — risk score, SHAP features, SDoH flags, care plan
-- `TwinPatientResponse` — RAG cohort with similarity scores
-
-### `backend/app/services.py`
-**The brain of the system.** Three responsibilities:
-1. **`run_prediction()`** — loads ML artifacts, builds feature matrix, runs RF_RAG inference, computes SHAP values. Falls back to deterministic mock if model files absent.
-2. **`run_rag_retrieval()`** — embeds clinical note, queries Qdrant, computes `rag_readmission_rate` and semantic neighbourhood risk index (SNRI).
-3. **`_generate_llm_care_plan()`** — calls Gemini API with risk data and SHAP drivers; falls back to rule-based plan.
-
-### `backend/app/core/auth.py`
-FastAPI dependency (`require_auth`) that validates Firebase JWT ID tokens. In dev mode (no `FIREBASE_PROJECT_ID`), returns a dummy token object so the whole API is accessible without Firebase.
-
-### `backend/app/core/config.py`
-Pydantic `BaseSettings` class. Reads from environment / `.env` file. Single source of truth for all configuration values.
-
-### `backend/app/api/routes.py`
-Thin API router. Delegates all logic to `services.py`. Applies `require_auth` dependency to every endpoint.
-
-### `backend/models/`
-The mounted ML artifact directory. These files are committed to the repo so every developer immediately has the trained model after `git pull`:
-- `best_model.joblib` — winning RF_RAG classifier (~15 MB)
-- `preprocessor.joblib` — fitted ColumnTransformer
-- `feature_names.json` — ordered feature list + metadata (147 features)
-- `sample_test_patient.json` — reference inference test case
-
-### `backend/tests/test_api.py`
-pytest test suite with `TestClient`. Auth is mocked via `dependency_overrides`. Tests cover health probes, prediction, RAG retrieval, validation errors, and SDoH extraction.
-
----
-
-## 📁 `frontend/` — Next.js Clinical Dashboard
-
-### `frontend/Dockerfile`
-Three-stage build (deps → builder → runner). Produces a minimal standalone Next.js image using `output: 'standalone'` in `next.config.ts`.
-
-### `frontend/.env.production` / `frontend/.env.example`
-Firebase Web SDK configuration and backend API URL. The `.production` file is used during the Docker build; `.example` is the template for new developers.
-
-### `frontend/next.config.ts`
-Minimal Next.js config. `output: 'standalone'` is critical — it enables Docker multi-stage build optimisation.
-
-### `frontend/postcss.config.mjs`
-Required for Tailwind CSS v4's PostCSS compilation pipeline to work correctly inside Docker's Turbopack build.
-
-### `frontend/src/app/globals.css`
-Tailwind v4 CSS using `@import "tailwindcss"`. Defines all CSS variables for the dark-mode design system (HSL color tokens for background, foreground, primary, border, etc.).
-
-### `frontend/src/app/layout.tsx`
-Root layout. Wraps the app in `AuthProvider` (Firebase) and `ThemeProvider`.
-
-### `frontend/src/app/page.tsx`
-Main dashboard page. Handles:
-- Fetching patient data from FastAPI
-- Rendering Risk Score Gauge, SDoH badges, Twin-Patient table, SHAP plot, care plan
-- Injecting Firebase JWT into `Authorization: Bearer` header for every API call
-
-### `frontend/src/contexts/AuthContext.tsx`
-React context that wraps Firebase Auth. Provides `currentUser` and `getIdToken()` to the entire application.
-
-### `frontend/src/components/LoginModal.tsx`
-Full-screen modal that blocks dashboard access until the clinician signs in with Firebase Auth (email/password).
-
-### `frontend/src/components/theme-provider.tsx`
-`next-themes` wrapper for future light/dark mode toggle.
-
-### `frontend/src/lib/firebase.ts`
-Firebase app initialisation using `NEXT_PUBLIC_FIREBASE_*` environment variables.
-
----
-
-## 📁 `ml_engine/` — Machine Learning Pipeline
-
-All training, evaluation, and model serialisation code. Run by M1 (Data Scientist) on their local machine using Colab/Jupyter.
-
-| File | Purpose |
-|---|---|
-| `run_phase1_2.py` | Data loading, cleaning, feature engineering, EDA |
-| `split.py` | Stratified train/val/test split with `encounter_id` retention |
-| `clean.py` | Data cleaning utilities (imputation, outlier removal, encoding) |
-| `run_phase3_6.py` | Baseline model training (LR, RF) — Phases 3–6 without RAG |
-| `run_phase4_6_rag.py` | **Main training script.** RAG ablation study across 6 models × 2 feature sets. Selects winner, generates SHAP plots, serialises artifacts to `backend/models/`. |
-| `train_baselines.py` | Standalone baseline training helpers |
-| `train_ft_transformer.py` | FT-Transformer training loop |
-| `ft_transformer.py` | Custom PyTorch FT-Transformer classifier implementation |
-| `evaluate.py` | AUROC, AUPRC, F1, Brier score computation + ROC/PR plot generation |
-| `shap_explain.py` | `AvertCareExplainer` wrapper: computes global/local SHAP values for tree and neural net models |
-| `predict.py` | Standalone batch inference utility |
-| `rag_integration.py` | Helpers for joining the `rag_readmit_rate` feature onto train/val/test splits |
-| `models/` | Serialised `.joblib` files for all 6 ablation models (committed to repo) |
-| `reports/` | Ablation metrics CSV, markdown report, ROC/PR curve PNGs |
-| `shap_output/` | SHAP summary bar + beeswarm plots, local explanation JSON |
-| `metrics/` | Raw ablation metrics JSON |
-| `data/processed/` | Intermediate processed splits with IDs |
-| `requirements.txt` | Minimal ML-only dependencies (for local/Colab use) |
-
----
-
-## 📁 `data/` — Dataset Storage
-
-| Path | Purpose |
-|---|---|
-| `data/raw/diabetic_data.csv` | Original UCI Diabetes 130-US Hospitals dataset (10 years) |
-| `data/processed/train_with_rag.csv` | M2's output — augmented training set with `rag_readmit_rate` column (~10K rows). Committed to repo so M1 can pull and train directly. |
-
----
-
-## 📁 `scripts/` — Utility Scripts
-
-| File | Purpose |
-|---|---|
-| `seed_rag_engine.py` | **One-time setup script.** Reads `diabetic_data.csv`, generates clinical notes, embeds them, and upserts into Qdrant. Also produces `train_with_rag.csv`. Run before enabling `LIVE_RAG_ENABLED=true`. |
-| `requirements-seed.txt` | Dependencies for the seeder (qdrant-client, sentence-transformers, etc.) |
-
----
-
-## 📁 `grafana/` — Observability
-
-| Path | Purpose |
-|---|---|
-| `provisioning/prometheus.yml` | Prometheus scrape config — targets `backend:8000/metrics` |
-| `provisioning/datasources/` | Grafana auto-datasource config (Prometheus URL) |
-| `provisioning/dashboards/` | Auto-provisioned Grafana dashboard JSON (AvertCare IT Ops) |
-
----
-
-## 📁 `notebooks/` — Jupyter Notebooks
-
-Exploratory analysis notebooks used by M1 during the early phases of the project. Not used in production.
-
----
-
-## 📁 `vector_db/` — Vector DB Init
-
-Reserved for future Qdrant collection initialisation scripts. Currently a placeholder.
-
----
-
-## 🔄 Data Flow (End-to-End)
+## 📦 3. Repository Structure & Directory Roles
 
 ```
-CSV (diabetic_data.csv)
-  → scripts/seed_rag_engine.py
-      → generate clinical notes
-      → embed with MiniLM-L6-v2
-      → upsert into Qdrant (clinical_cases collection)
-      → export data/processed/train_with_rag.csv
-
-train_with_rag.csv
-  → ml_engine/run_phase4_6_rag.py (M1)
-      → RAG ablation (6 models)
-      → Winner: RF_RAG
-      → backend/models/{best_model, preprocessor, feature_names}.joblib|json
-
-Docker Compose (docker compose up)
-  → mounts backend/models → /app/models (read-only)
-  → backend FastAPI loads artifacts on first request via @lru_cache
-
-Clinician logs in via LoginModal (Firebase)
-  → gets JWT ID Token
-  → POST /api/predict with Bearer token
-  → services.py:
-      1. Validates JWT (auth.py)
-      2. Builds patient DataFrame
-      3. preprocessor.transform() → 146-dim feature vector
-      4. best_model.predict_proba() → readmission probability
-      5. shap.TreeExplainer() → top-5 SHAP drivers
-      6. run_rag_retrieval() → top-3 twin patients from Qdrant
-      7. Gemini 2.0 Flash → 3-point care plan (if enabled)
-  → PredictResponse → Next.js dashboard renders results
+AvertCare/
+├── .github/workflows/deploy.yml   # Automated GitHub Actions CI/CD (Ruff, Pytest, Vercel, Render)
+├── docker-compose.yml             # Local 6-service orchestration mesh (pinned to Docker Hub)
+├── ARCHITECTURE.md                # System engineering specification (this file)
+├── WALKTHROUGH.md                 # Deployment & operations guide
+├── AVERTCARE_HANDOFF.md           # Model provenance, ground truth, and constraints
+│
+├── backend/                       # FastAPI Clinical Scoring Microservice
+│   ├── Dockerfile                 # Multi-stage production container
+│   ├── requirements.txt           # Pinned backend dependencies
+│   ├── app/
+│   │   ├── main.py                # FastAPI factory, CORS, inference logging & metrics
+│   │   ├── schemas.py             # Pydantic v2 data models (PredictResponse, PatientEncounter)
+│   │   ├── services.py            # Inference engine, TreeSHAP, RAG retrieval & Gemini logic
+│   │   ├── note_template.py       # Clinical note synthesizer for twin matching
+│   │   ├── api/routes.py          # HTTP routing (/api/predict, /api/twin-patients)
+│   │   └── core/
+│   │       ├── auth.py            # Firebase JWT & persistent clinician token validator
+│   │       └── config.py          # Environment settings (Pydantic BaseSettings)
+│   ├── models/                    # Serialized production ML artifacts
+│   │   ├── best_model.joblib      # Winning XGBoost depth-6 classifier
+│   │   ├── preprocessor.joblib    # Fitted ColumnTransformer (OneHot + Scaler)
+│   │   ├── rag_train_index.npz    # 384-dim precomputed embeddings for training cohort
+│   │   ├── rag_train_meta.csv     # Metadata associated with vector index
+│   │   └── feature_names.json     # Feature list and metadata specification
+│   └── tests/                     # Automated pytest suite (13 unit/integration tests)
+│
+├── frontend/                      # Clinician-Facing Web Application
+│   ├── Dockerfile                 # Standalone Next.js multi-stage Docker build
+│   ├── next.config.ts             # Output standalone configuration
+│   └── src/
+│       ├── app/
+│       │   ├── page.tsx           # Epic EHR-style discharge dashboard
+│       │   └── globals.css        # Tailwind CSS v4 design tokens
+│       ├── components/
+│       │   └── LoginModal.tsx     # Clinician authentication modal with quick-access bypass
+│       └── contexts/
+│           └── AuthContext.tsx    # Firebase Auth provider & localStorage session store
+│
+├── ml_engine/                     # Offline Data Science & Model Training Lab (Not used at request time)
+│   ├── clean.py                   # Data cleaning and feature engineering
+│   ├── split.py                   # Patient-level 80/10/10 split logic
+│   ├── run_safe_ablation.py       # Leakage-safe ablation study runner
+│   ├── evaluate.py                # Metrics calculation (AUROC, AUPRC, F1, Brier score)
+│   ├── ft_transformer.py          # PyTorch Tabular Transformer architecture
+│   ├── metrics/                   # Raw JSON metrics output from training pipelines
+│   └── reports/                   # Markdown evaluation reports and ROC/PR plots
+│
+├── scripts/                       # Database and Vector Seeding Scripts
+│   ├── build_leakage_safe_rag.py  # Builds the safe training vector index
+│   ├── fast_seed_qdrant.py        # High-speed streaming seeder for Qdrant (batch size 2500)
+│   └── seed_rag_engine.py         # Qdrant Cloud / Local seeder
+│
+└── grafana/                       # Observability & Metrics Dashboard Provisioning
+    └── provisioning/              # Auto-provisioning datasources and AvertCare IT Ops dashboards
 ```
 
 ---
 
-## 👥 Team Roles
+## 🤖 4. Model Architecture & Empirical Ground Truth
 
-| Role | Responsibility |
-|---|---|
-| **M1 (Data Scientist)** | `ml_engine/` — data cleaning, model training, SHAP, serialisation |
-| **M2 (You / Full-Stack)** | `backend/`, `frontend/`, `scripts/`, `docker-compose.yml`, CI/CD |
+### Official Performance Matrix (Held-out Test Cohort: $N = 10,177$)
+
+| Architecture | Feature Set | Test AUROC | Test AUPRC | Test F1 | Test Precision | Test Recall | Decision Thresh |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Logistic Regression** | Tabular Only | `0.6680` | `0.2331` | `0.2765` | `19.15%` | `49.73%` | `0.52` |
+| **Random Forest** | Tabular Only | `0.6725` | `0.2324` | `0.2801` | `20.38%` | `44.79%` | `0.53` |
+| **FT-Transformer** | Tabular Only | `0.6733` | `0.2438` | `0.2785` | `20.09%` | `45.41%` | `0.15` |
+| **XGBoost (Unweighted)** | Tabular Only | `0.6809` | `0.2621` | `0.2868` | `20.09%` | `50.09%` | `0.13` |
+| **XGBoost (Production)** | **Tabular + RAG ($k=10$)** | **`0.6804`** | **`0.2565`** | **`0.2905`** | **`19.53%`** | **`56.71%`** | **`0.12`** |
+
+### The Scientific Defense of 0.680 AUROC:
+* **The 0.697 Trap**: An earlier prototype script (`run_phase4_6_rag.py`) included retrospective text in synthetic notes that leaked readmission labels, inflating the correlation ($r \approx 0.85$).
+* **The Leakage-Safe Remedy**: `run_safe_ablation.py` quarantined all search vectors strictly to training patients, dropped post-discharge language, and enforced patient-level splitting. The true, reproducible clinical performance is **0.680 AUROC**, prioritizing high sensitivity (**56.7% Recall**) to prevent missed clinical deterioration.
 
 ---
 
-## 🔑 Key Design Decisions
+## ⚡ 5. Redis Infrastructure Role
 
-| Decision | Rationale |
-|---|---|
-| **RF_RAG over XGBoost** | M1's ablation showed RF+RAG achieves highest AUROC; XGBoost was out-of-scope for the task spec |
-| **`backend/models/` committed to git** | Removes the "run training before anything works" problem — every developer has a working model after `git pull` |
-| **Feature flag fallback** | `LIVE_RAG_ENABLED` / `LIVE_LLM_ENABLED` allow the app to run fully offline without Qdrant seeding or a Gemini API key |
-| **Firebase Auth with dev bypass** | Blank `FIREBASE_PROJECT_ID` = no auth required — CI/CD passes without Firebase credentials |
-| **Tailwind v4 PostCSS** | v4 requires `@import "tailwindcss"` and a `postcss.config.mjs` — the old v3 `@tailwind` directives crash Turbopack |
-| **Volume mount for models** | M1 updates `.joblib` files → commit → team pulls → Docker restarts with new model, no image rebuild required |
+Redis is deployed as an in-memory caching and rate-limiting backbone (`avertcare-redis` on port `6379`):
+
+1. **Twin-Encounter Caching**: Caches cosine-similarity lookups and SHAP calculations for identical patient charts, reducing repeat inference latency to `<2ms`.
+2. **LLM Quota Protection**: Acts as a distributed token-bucket rate limiter to protect the Google Gemini API key from rate limits and high costs during burst traffic.
+3. **Session Store**: Supports stateless horizontal scaling of the FastAPI backend across multiple container replicas.
+
+---
+
+## 🚀 6. CI/CD & Cloud Deployment Pipeline
+
+AvertCare uses automated continuous deployment triggered on every push to `main`:
+
+```
+Git Push to main
+       │
+       ▼
+GitHub Actions (deploy.yml)
+       ├─ Linting & Style: Ruff v0.17.0
+       ├─ Security Audit: Bandit
+       ├─ Automated Testing: Pytest (13 unit & API contract tests)
+       ├─ Docker Hub Publish: Builds & pushes public tagged images:
+       │    • ayushman25/avertcare-backend:latest
+       │    • ayushman25/avertcare-frontend:latest
+       ├─ Vercel Deployment: Deploys Next.js dashboard via Vercel CLI 22
+       └─ Render Trigger: POST to RENDER_DEPLOY_HOOK_URL rebuilding FastAPI
+```

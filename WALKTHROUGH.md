@@ -1,103 +1,103 @@
-# AvertCare: Project Walkthrough & Roadmap
+# AvertCare: Complete Project Walkthrough & Operations Manual
 
-This document outlines everything we have built for the **Cognizant Hackathon (Use Case #6: Hospital Readmission Risk Prediction)**, our architectural decisions, and the current system status.
-
----
-
-## 🏗️ What We Have Built (The Full Stack)
-
-We have successfully built a fully functional, loosely coupled **Prescriptive Clinical Decision Support System** with 7 containerised services, an end-to-end ML pipeline, and a clinician-facing dark-mode dashboard.
+> **Cognizant Hackathon (Use Case #6: Hospital Readmission Risk Prediction)**  
+> AvertCare is a production-grade Prescriptive Clinical Decision Support System that predicts diabetic 30-day readmissions, visualizes TreeSHAP explanations, searches historical twin patients, and generates prescriptive discharge checklists powered by Google Gemini.
 
 ---
 
-### 1. Vector Database Seeding & RAG Feature Extraction
-- **Automated Pipeline (`scripts/seed_rag_engine.py`)**: Ingests tabular patient data (`diabetic_data.csv`), generates unstructured clinical notes (injecting Social Determinants of Health), and embeds them using `sentence-transformers/all-MiniLM-L6-v2`.
-- **Qdrant Upsert & RAGrisk**: Connects to the local Qdrant Vector DB, upserts embeddings along with metadata, and calculates a localised readmission rate by querying the top-5 nearest neighbours.
-- **M1 Handoff**: Automatically exports `data/processed/train_with_rag.csv` — the augmented dataset used to train the final models.
+## 🏗️ 1. What We Have Built (The Full Stack)
 
-### 2. ML Engine — Phase 4–6 (M1's Work)
-- **RAG Ablation Study** (`ml_engine/run_phase4_6_rag.py`): Trained and evaluated 6 models (Logistic Regression, Random Forest, FT-Transformer) × (Tabular Only, Tabular + RAG) on the augmented dataset.
-- **Winning Model**: **Random Forest + RAG (`RF_RAG`)** — AUROC 0.6971 vs. 0.6725 Tabular-only (+0.0246 from RAG).
-- **SHAP Explainability**: Global and local SHAP explanations generated; stored in `ml_engine/shap_output/`.
-- **Backend Handoff Artifacts** (in `backend/models/`):
-  - `best_model.joblib` — the serialized RF_RAG classifier
-  - `preprocessor.joblib` — the fitted ColumnTransformer (OneHot + StandardScaler)
-  - `feature_names.json` — ordered feature names + metadata
-  - `sample_test_patient.json` — end-to-end inference verification
+### A. Machine Learning Engine (Leakage-Safe)
+* **Dataset**: UCI Diabetes 130-US Hospitals (101,766 inpatient encounters across 10 years).
+* **Patient-Level Split**: Strict 80/10/10 split ensuring zero patient overlap across training, validation, and test sets.
+* **Winning Model**: **XGBoost Depth-6 (Unweighted)** with RAG feature augmentation.
+  * **Test AUROC**: `0.6804` (reported as **0.680**).
+  * **Test AUPRC**: `0.2565`.
+  * **Test Recall (Sensitivity)**: **`56.71%`** at decision threshold `0.12`.
+* **TreeSHAP Explainability**: Computes real-time marginal contributions for individual chart drivers (e.g., prior inpatient visits, length of stay, and admission velocity).
 
-### 3. Backend API & Live Inference
-- **FastAPI Framework**: Exposes `POST /api/predict` and `POST /api/twin-patients` with strict Pydantic v2 schemas.
-- **Live ML Inference** (`app/services.py`): When model artifacts are mounted, performs real RF_RAG inference. Gracefully falls back to a deterministic mock when artifacts are absent (CI environments).
-- **Live RAG Retrieval**: Embeds incoming clinical notes, queries Qdrant for the top-3 most similar past encounters, and computes the semantic risk index.
-- **Prescriptive LLM Care Plan**: When `LIVE_LLM_ENABLED=true`, calls Gemini 2.0 Flash to generate a structured 3-point discharge plan.
+### B. Leakage-Safe RAG Engine (Historical Twin Retrieval)
+* **Precomputed Vector Index**: 384-dimensional dense embeddings created via `sentence-transformers/all-MiniLM-L6-v2` stored in `backend/models/rag_train_index.npz`.
+* **Zero Leakage**: Search space is strictly quarantined to training encounters. Notes contain only discharge-time observations (no post-discharge outcome text).
+* **Output**: Surfaces the top-3 most clinically similar diabetic patients and appends `rag_readmit_rate_k10` into the feature matrix.
 
-### 4. Clinician Authentication & Security
-- **Firebase Auth Middleware** (`app/core/auth.py`): Validates Firebase JWT tokens on all protected routes.
-- **Frontend Integration** (`src/contexts/AuthContext.tsx`): A `LoginModal` intercepts unauthenticated users. Firebase ID tokens are injected as Bearer headers in all API calls.
-- **Dev Bypass**: When `FIREBASE_PROJECT_ID` is unset, the middleware is transparent (useful for CI/CD).
+### C. Prescriptive Generative AI (Google Gemini)
+* **Model**: Google Gemini 2.0 Flash.
+* **Actionable Checklists**: Synthesizes a structured 3-step discharge care plan and clinical rationale from the risk score, top 3 SHAP drivers, twin interventions, and Social Determinants of Health (SDoH).
+* **Deterministic Fallback**: If offline or unconfigured, falls back to a rules engine (`plan_source = "rules"`).
 
-### 5. MLOps & Observability Stack
-- **Docker Compose** orchestrates 6 services: FastAPI, Next.js, Qdrant, Redis, Prometheus, Grafana.
-- **Prometheus** scrapes `/metrics` from the FastAPI backend.
-- **Grafana** auto-provisions a dashboard (available at `http://localhost:3001`) visualising:
-  - API request throughput (RPS)
-  - P95/P99 inference latency
-  - HTTP 2xx/4xx/5xx error rates
+### D. Clinician Dashboard (Next.js 16)
+* **Tech Stack**: Next.js 16, TypeScript, Tailwind CSS v4.
+* **Epic EHR Aesthetic**: Dark-mode UI with low (green), moderate (amber), and high (red) risk indicators.
+* **One-Click Presets**: Pre-configured demo scenarios (Quiet Home Discharge, Standard Sample Chart, and High-Utilization Skilled Nursing case).
+* **Fail-Safe Access**: Quick Clinician Access bypass button ensures demo sessions never expire during judge evaluations.
 
-### 6. The Clinical Dashboard (Next.js 16)
-- **Tech Stack**: Next.js 16, Tailwind CSS v4 (PostCSS pipeline), TypeScript.
-- **Dark Mode UI**: High-contrast dark-mode mimicking Epic EHR aesthetics.
-- **Dynamic Render**: Fetches from FastAPI to render the Risk Score Gauge, SDoH badges, Twin-Patient RAG cohort table, TreeSHAP force-plot, and GenAI care plan.
-
-### 7. CI/CD Pipeline
-- **GitHub Actions** (`deploy.yml`): Triggers on every push to `main`.
-- **Quality Gates**: `ruff` linting, `bandit` security scan, `pytest` suite.
-- **Deployment**: Builds and pushes the Docker image to GHCR under the `avert-care` organisation.
+### E. MLOps Observability Mesh
+* **Docker Compose**: Orchestrates 6 microservices: Next.js, FastAPI, Qdrant, Redis, Prometheus, and Grafana.
+* **Prometheus & Grafana**: Real-time monitoring of inference latency, request throughput, and error rates at `http://localhost:3001`.
 
 ---
 
-## 🚀 Universal Setup (For All Team Members)
+## 🚀 2. Universal Setup (Run Locally in 2 Minutes)
 
-> **One-command setup after `git pull develop`:**
+All backend and frontend images are publicly pre-built and pinned to Docker Hub. No compilation required.
 
 ```bash
-# 1. Copy environment files
-cp backend/.env.example backend/.env          # Fill in GEMINI_API_KEY
-cp frontend/.env.example frontend/.env.production  # Fill in Firebase config
+# 1. Clone the repository and navigate to root
+git clone https://github.com/AYUS25/AvertCare.git
+cd AvertCare
 
-# 2. Spin up all 6 services
-docker compose up -d --build
+# 2. Configure environment files
+cp backend/.env.example backend/.env
+# (Optional: Add your GEMINI_API_KEY to backend/.env for live GenAI plans)
 
-# 3. Seed Qdrant (first time only)
-pip install -r scripts/requirements-seed.txt
-python scripts/seed_rag_engine.py --csv data/raw/diabetic_data.csv
+# 3. Pull pre-built images and launch the stack
+docker compose pull
+docker compose up -d
 
-# 4. Open the dashboard
-open http://localhost:3000
+# 4. Access the services
+# Clinician Dashboard : http://localhost:3000
+# FastAPI Swagger Docs : http://localhost:8000/docs
+# Grafana Observability: http://localhost:3001 (admin / avertcare)
+# Prometheus Targets   : http://localhost:9090
 ```
 
-> **Service URLs after startup:**
-> | Service | URL |
-> |---|---|
-> | Dashboard | http://localhost:3000 |
-> | API Docs | http://localhost:8000/docs |
-> | Qdrant UI | http://localhost:6333/dashboard |
-> | Grafana | http://localhost:3001 (admin / avertcare) |
-> | Prometheus | http://localhost:9090 |
+---
+
+## ☁️ 3. Cloud Production Verification (Live URLs)
+
+For hackathon judges evaluating without running Docker locally:
+
+| Service | Live Cloud URL | Hosting Provider |
+| :--- | :--- | :--- |
+| **Clinician Web App** | [https://avert-care.vercel.app](https://avert-care.vercel.app) | Vercel Edge Network |
+| **FastAPI Backend API** | [https://avertcare.onrender.com](https://avertcare.onrender.com) | Render Web Service |
+| **Interactive Docs** | [https://avertcare.onrender.com/docs](https://avertcare.onrender.com/docs) | Swagger UI |
+| **Vector Database** | AWS Cloud Cluster (10,000 vectors) | Qdrant Cloud |
 
 ---
 
-## ⚙️ Feature Flags (in `backend/.env`)
+## ⚙️ 4. Feature Flags (in `backend/.env`)
 
-| Flag | Default | Effect |
-|---|---|---|
-| `LIVE_RAG_ENABLED` | `true` | Uses live Qdrant retrieval; falls back to mock if `false` |
-| `LIVE_LLM_ENABLED` | `false` | Calls Gemini 2.0 Flash; uses rule-based plan if `false` |
+| Variable | Default | Clinical / System Behavior |
+| :--- | :---: | :--- |
+| `LIVE_RAG_ENABLED` | `true` | Queries vector retrieval; falls back to deterministic mock if disabled |
+| `LIVE_LLM_ENABLED` | `true` | Calls Gemini 2.0 Flash; uses rule-based clinical protocol if disabled |
+| `GEMINI_API_KEY` | *(Set)* | Authenticates with Google AI Studio |
+| `FIREBASE_PROJECT_ID` | `avertcare` | Enables JWT verification; leaving blank enables transparent dev mode |
+| `QDRANT_URL` | *(Cluster)* | Cloud cluster endpoint for vector storage |
+| `QDRANT_API_KEY` | *(Set)* | Cloud cluster access credentials |
 
 ---
 
-## 🎯 Next Steps
+## 📊 5. Verification Checklist
 
-1. **Wire remaining frontend fields**: Expose more patient data fields in the UI (A1C result, medication type, etc.) so the RF_RAG model can use richer input data beyond the current defaults.
-2. **Production deployment**: Configure Vercel for the frontend; deploy the FastAPI backend to Cloud Run or a VM with the Docker image from GHCR.
-3. **CI/CD model update flow**: When M1 updates `.joblib` files, push to the `develop` branch — Docker restarts with the new model via the volume mount.
+To verify that the system is functioning correctly:
+
+1. **Authentication**: Open `http://localhost:3000` (or the Vercel URL). Click *"Quick Clinician Access (Never Expires)"* or log in with `doctor@avertcare.local` / `password123`.
+2. **Preset Testing**: Click the *"High-Utilization Skilled Nursing"* preset. Observe that Age, Length of Stay, and Prior Inpatient Visits update automatically.
+3. **Inference Execution**: Click **"Run AI Analysis"**.
+   - Verify Risk Category renders as **High Risk** (Red indicator).
+   - Check the **Relative Risk Badge**: e.g., `3.4x baseline risk (92th percentile)`.
+   - Inspect the **Discharge Checklist**: Confirms 3 specific actions with a clinical rationale.
+4. **Metrics Inspection**: Open Grafana at `http://localhost:3001`. Refresh to observe the request counter and inference latency spike on the dashboard.
