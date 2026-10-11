@@ -959,6 +959,9 @@ def _gemini_text(response) -> str:
     return (text or "").strip()
 
 
+_gemini_backoff_until: float = 0.0
+
+
 def _generate_llm_care_plan(
     risk_score: float,
     sdoh_flags: list[str],
@@ -969,6 +972,10 @@ def _generate_llm_care_plan(
     risk_percentile: int | None = None,
 ) -> tuple[list[str], str] | None:
     """Call Gemini. None means the caller should use the rule checklist."""
+    global _gemini_backoff_until
+    if time.time() < _gemini_backoff_until:
+        return None
+
     try:
         client = _get_gemini_client()
         interventions = twin_interventions or [
@@ -1004,7 +1011,12 @@ def _generate_llm_care_plan(
         return steps, rationale or _rule_rationale(shap_features, sdoh_flags, a1c_result, rel_risk_ratio, risk_percentile)
 
     except Exception as exc:
-        logger.warning("Gemini call failed (%s), falling back to rule-based care plan.", exc)
+        msg = str(exc)
+        if "429" in msg or "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
+            _gemini_backoff_until = time.time() + 600
+            logger.warning("Gemini API quota exhausted (429). Activating 10-minute circuit breaker to maintain instant latency.")
+        else:
+            logger.warning("Gemini call failed (%s), falling back to rule-based care plan.", exc)
         return None
 
 
