@@ -3,13 +3,11 @@ FT-Transformer (Feature Tokenizer + Transformer Encoder for Tabular Data)
 PyTorch Implementation for Readmission Risk Prediction
 """
 
-import os
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
 import numpy as np
+import torch
 from sklearn.base import BaseEstimator, ClassifierMixin
+from torch import nn, optim
+from torch.utils.data import DataLoader, Dataset
 
 
 class TabularDataset(Dataset):

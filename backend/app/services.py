@@ -51,7 +51,8 @@ def _install_shap_base_score_patch() -> None:
     back. The decode step is the one SHAP actually uses, so the number is unwrapped there.
     """
     try:
-        import shap.explainers._tree as tree  # type: ignore[import-untyped]
+        import importlib
+        tree = importlib.import_module("shap.explainers._tree")
     except Exception as exc:
         logger.debug("SHAP base score patch skipped: %s", exc)
         return
@@ -377,6 +378,10 @@ def run_prediction(payload: PatientEncounter) -> PredictResponse:
 
     # ── FALLBACK: deterministic mock ──────────────────────────────────────────
     if artifacts is None:
+        t_start = time.perf_counter()
+        logger.info("━" * 60)
+        logger.info("[PREDICT:START:MOCK] Running fallback inference for Patient ID: %s | Prior: %d | Stay: %dd",
+                    payload.patient_id, payload.num_prior_admissions, payload.time_in_hospital)
         raw_score = min(
             0.3
             + (payload.num_prior_admissions * 0.12)
@@ -403,6 +408,10 @@ def run_prediction(payload: PatientEncounter) -> PredictResponse:
             rel_risk_ratio=rel_risk_ratio, risk_pct=risk_pct,
         )
         cms_saved = round(15_400 * raw_score, 2) if risk_category == RiskCategory.HIGH else None
+        elapsed_ms = (time.perf_counter() - t_start) * 1000
+        logger.info("[PREDICT:DONE:MOCK] Completed in %.1f ms | Risk: %.2f%% [%s] for Patient ID: %s",
+                    elapsed_ms, raw_score * 100, risk_category.value, payload.patient_id)
+        logger.info("━" * 60)
         return PredictResponse(
             patient_id=payload.patient_id,
             risk_score=round(raw_score, 4),

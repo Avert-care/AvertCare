@@ -25,7 +25,7 @@ from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from evaluate import compute_metrics, find_optimal_threshold  # noqa: E402
+from evaluate import compute_metrics, find_optimal_threshold
 
 DATA_DIR = "ml_engine/data/processed"
 RAG_CSV = "data/processed/rag_features_safe.csv"
@@ -270,7 +270,7 @@ def _write_report(rows, winner, k, probe_scores):
         )
     lines += [
         "",
-        f"## Winner",
+        "## Winner",
         "",
         f"- Model: `{winner['model']}`",
         f"- Features: {winner['features']}",

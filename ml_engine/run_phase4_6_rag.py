@@ -10,14 +10,14 @@ STRATEGY for RAG coverage (~10% of rows have a real RAG value):
   - This avoids data leakage and is consistent across all splits.
 """
 
-import os
-import sys
 import json
-import joblib
+import os
 import shutil
+import sys
+
+import joblib
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import torch
 
 # Add ml_engine dir to path so local imports work
@@ -26,13 +26,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 from evaluate import (
     compute_metrics,
     find_optimal_threshold,
-    plot_roc_curves,
     plot_pr_curves,
+    plot_roc_curves,
     save_metrics_summary,
 )
 from ft_transformer import FTTransformerClassifier
 from shap_explain import AvertCareExplainer
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 0.  PATHS
@@ -106,8 +105,8 @@ def run_phase4_ablation(df_train, df_val, df_test):
     print("PHASE 4: RAG ABLATION STUDY")
     print("=" * 72)
 
-    from sklearn.linear_model import LogisticRegression
     from sklearn.ensemble import RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
 
     target = "readmitted_binary"
     y_train = df_train[target].values
@@ -315,7 +314,7 @@ def _train_ft(X_tr, y_tr, X_vl, y_vl, n_num=12, extra_num=0):
     print(f"  [FT] Training FTTransformerClassifier (n_num={n_num_total}, n_cat={len(cat_cards)})...")
     sys.stdout.flush()
     ft.fit(X_tr_sub, y_tr_sub, eval_set=(X_vl, y_vl))
-    print(f"  [FT] Training complete.")
+    print("  [FT] Training complete.")
     sys.stdout.flush()
     return ft
 
@@ -511,11 +510,11 @@ def run_phase6_serialization(winner_key, winner_obj, preprocessor,
     else:
         model_filename = "best_model.joblib"
 
-    print(f"\n  NOTE ON NAMING:")
+    print("\n  NOTE ON NAMING:")
     print(f"  The team lead requested 'xgboost_model.pkl', but the winning model is '{winner_key}'.")
-    print(f"  XGBoost was NOT part of the M1 ablation specification (LR / RF / FT-Transformer).")
+    print("  XGBoost was NOT part of the M1 ablation specification (LR / RF / FT-Transformer).")
     print(f"  Serializing as: '{model_filename}' — truthful filename.")
-    print(f"  ACTION REQUIRED: Inform team lead of this mismatch before renaming to xgboost_model.pkl.")
+    print("  ACTION REQUIRED: Inform team lead of this mismatch before renaming to xgboost_model.pkl.")
 
     # ── Serialize model ────────────────────────────────────────────────────
     model_path = os.path.join(BACKEND_DIR, model_filename)
@@ -669,14 +668,14 @@ def write_final_report(ablation_results, winner_key, model_path, prep_dest,
         f.write(f"- `rag_readmit_rate` included in features: **{uses_rag}**\n\n")
 
         f.write("## Phase 6: Serialization & Backend Handoff\n\n")
-        f.write(f"| Artifact | Path |\n|---|---|\n")
+        f.write("| Artifact | Path |\n|---|---|\n")
         f.write(f"| Final model | `{model_path}` |\n")
         f.write(f"| Preprocessor | `{prep_dest}` |\n")
         f.write(f"| Feature names | `{fn_path}` |\n")
         f.write(f"| Sample patient | `{sp_path}` |\n\n")
 
         f.write("## Inference Test\n\n")
-        f.write(f"- Result: **PASSED**\n")
+        f.write("- Result: **PASSED**\n")
         f.write(f"- Probability from fresh load: `{inference_prob:.4f}`\n")
         f.write(f"- Predicted class: `{inference_pred}`\n")
 

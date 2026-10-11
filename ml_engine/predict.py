@@ -5,11 +5,10 @@ and extracts top clinical risk drivers for backend API handoff.
 """
 
 import os
-import json
+
 import joblib
 import numpy as np
 import pandas as pd
-
 
 RISK_BANDS = {
     "LOW": {"min": 0.0, "max": 0.20, "label": "Low Risk", "color": "#10B981"},

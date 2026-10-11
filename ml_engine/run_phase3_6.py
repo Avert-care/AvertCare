@@ -3,20 +3,22 @@ Master Pipeline Orchestration Script for Phase 3 - Phase 6
 AvertCare Hospital Readmission Prediction System
 """
 
-import os
 import json
+import os
+
 import joblib
-import torch
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-
-from evaluate import compute_metrics, find_optimal_threshold, plot_roc_curves, plot_pr_curves, save_metrics_summary
-from train_baselines import train_and_evaluate_baselines
-from train_ft_transformer import train_and_evaluate_ft_transformer
+from evaluate import (
+    plot_pr_curves,
+    plot_roc_curves,
+    save_metrics_summary,
+)
+from predict import AvertCarePredictor
 from rag_integration import RAGFeatureIntegrator
 from shap_explain import AvertCareExplainer
-from predict import AvertCarePredictor, predict_patient_risk
+from train_baselines import train_and_evaluate_baselines
+from train_ft_transformer import train_and_evaluate_ft_transformer
 
 
 def run_full_phase3_6_pipeline():

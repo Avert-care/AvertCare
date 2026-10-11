@@ -4,14 +4,17 @@ Phase 3 Model Training on FT Tabular Embeddings
 """
 
 import os
-import json
+
 import joblib
-import torch
 import numpy as np
 import pandas as pd
-
+import torch
+from evaluate import (
+    compute_metrics,
+    find_optimal_threshold,
+    save_metrics_summary,
+)
 from ft_transformer import FTTransformerClassifier
-from evaluate import compute_metrics, find_optimal_threshold, plot_roc_curves, plot_pr_curves, save_metrics_summary
 
 
 def train_and_evaluate_ft_transformer():

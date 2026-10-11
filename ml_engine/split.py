@@ -36,22 +36,20 @@ ID columns
 """
 
 import os
-from typing import Tuple, List
 
 import joblib
-import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import StratifiedGroupKFold
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OrdinalEncoder, OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
 
 
 def split_data(
     df: pd.DataFrame,
     random_state: int = 42,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """
     Split *df* into train / validation / test with patient-level group integrity.
 
@@ -83,7 +81,7 @@ def split_data(
 
     test_idx  = folds[0][1]          # 10 % — held-out test
     val_idx   = folds[1][1]          # 10 % — held-out validation
-    train_idx: List[int] = []
+    train_idx: list[int] = []
     for i in range(2, 10):           # 80 % — training
         train_idx.extend(folds[i][1])
 
@@ -117,10 +115,10 @@ def split_data(
 
 def build_preprocessors(
     df_train: pd.DataFrame,
-    numeric_cols: List[str],
-    categorical_cols: List[str],
+    numeric_cols: list[str],
+    categorical_cols: list[str],
     output_dir: str = ".",
-) -> Tuple[ColumnTransformer, ColumnTransformer]:
+) -> tuple[ColumnTransformer, ColumnTransformer]:
     """
     Fit two ColumnTransformer preprocessors on *df_train* and save them.
 

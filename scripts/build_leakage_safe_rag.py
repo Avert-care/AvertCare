@@ -27,7 +27,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from ml_engine.note_template import build_discharge_note, historical_interventions  # noqa: E402
+from ml_engine.note_template import build_discharge_note, historical_interventions
 
 DATA_DIR = ROOT / "ml_engine" / "data" / "processed"
 OUT_CSV = ROOT / "data" / "processed" / "rag_features_safe.csv"

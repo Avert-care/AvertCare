@@ -4,10 +4,10 @@ Computes global feature importances and patient-level risk factor explanations.
 """
 
 import os
-import json
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import shap
 
 

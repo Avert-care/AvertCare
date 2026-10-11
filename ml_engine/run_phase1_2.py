@@ -41,16 +41,14 @@ Notes on deferred preprocessing
 """
 
 import os
-import json
-import sys
-import pandas as pd
-import numpy as np
+
 import matplotlib.pyplot as plt
-import joblib
+import numpy as np
+import pandas as pd
 
 # Local imports (run from ml_engine/ directory)
 from clean import clean_data
-from split import split_data, build_preprocessors
+from split import build_preprocessors, split_data
 
 
 def _fetch_dataset() -> pd.DataFrame:

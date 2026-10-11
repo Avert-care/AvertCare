@@ -66,7 +66,10 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - ./frontend/.env.local
+      - path: ./frontend/.env.local
+        required: false
+      - path: ./frontend/.env.production
+        required: false
     environment:
       # The API is accessed from the *browser*, so it must use localhost, not
       # the Docker service name. This is correct for local dev.
@@ -79,7 +82,7 @@ services:
       - avertcare-net
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 30s
       timeout: 10s
       retries: 3

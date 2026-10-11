@@ -20,8 +20,8 @@ IMPORTANT — sentinel choice for max_glu_serum / A1Cresult:
   is semantically accurate (the test was simply not performed for that encounter).
 """
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 # ICD-9 category mapping — aligned with Clore et al. (2014) grouping scheme

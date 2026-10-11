@@ -5,10 +5,11 @@ Seeds the collection `clinical_cases` in local Qdrant.
 """
 
 import time
+
 import numpy as np
 import pandas as pd
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams, PointStruct
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 QDRANT_URL = "http://qdrant:6333"
 COLLECTION_NAME = "clinical_cases"

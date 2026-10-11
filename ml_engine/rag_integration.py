@@ -5,10 +5,10 @@ with M1 Tabular ML Pipeline.
 """
 
 import os
-import json
+
+import joblib
 import numpy as np
 import pandas as pd
-import joblib
 
 
 class RAGFeatureIntegrator:

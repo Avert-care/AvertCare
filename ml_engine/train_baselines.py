@@ -4,14 +4,18 @@ Phase 3 Model Training on Tabular Preprocessed Features
 """
 
 import os
-import json
-import joblib
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 
-from evaluate import compute_metrics, find_optimal_threshold, plot_roc_curves, plot_pr_curves, save_metrics_summary
+import joblib
+import pandas as pd
+from evaluate import (
+    compute_metrics,
+    find_optimal_threshold,
+    plot_pr_curves,
+    plot_roc_curves,
+    save_metrics_summary,
+)
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 
 def train_and_evaluate_baselines():

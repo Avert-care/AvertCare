@@ -21,21 +21,17 @@ from __future__ import annotations
 import argparse
 import random
 import uuid
-import time
 from pathlib import Path
 
 import pandas as pd
-from tqdm import tqdm
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
     PointStruct,
     VectorParams,
-    Filter,
-    FieldCondition,
-    MatchValue,
 )
 from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
 
 # ─────────────────────────────────────────────────────────────
 # Constants
@@ -91,7 +87,7 @@ def generate_clinical_note(row: pd.Series) -> str:
 
     note = (
         f"Patient is a {int(row.get('age_numeric', 65))}-year-old individual admitted for "
-        f"{str(row.get('diag_1', 'unspecified diagnosis'))}. "
+        f"{row.get('diag_1', 'unspecified diagnosis')!s}. "
         f"Length of stay: {int(row.get('time_in_hospital', 5))} days. "
         f"Number of inpatient visits in the past year: {int(row.get('number_inpatient', 0))}. "
         f"Number of emergency visits: {int(row.get('number_emergency', 0))}. "
@@ -253,7 +249,7 @@ def run(csv_path: Path, qdrant_url: str, limit: int, api_key: str = "") -> None:
     df.to_csv(out_path, index=False)
     print(f"\n📦 M1 training dataset exported → {out_path}")
     print(f"   Shape: {df.shape}")
-    print(f"   Columns added: 'clinical_note', 'age_numeric', 'readmitted_binary', 'rag_readmit_rate'\n")
+    print("   Columns added: 'clinical_note', 'age_numeric', 'readmitted_binary', 'rag_readmit_rate'\n")
     print("=== Pipeline Complete ✅ ===\n")
 
 
