@@ -19,6 +19,7 @@ import {
   Search,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiBaseUrl, prewarmBackend } from "@/lib/api";
 
 type SHAPFeature = {
   feature: string;
@@ -113,7 +114,11 @@ export default function AlertsPage() {
   const [search, setSearch] = useState("");
 
   const { getFreshToken } = useAuth();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = getApiBaseUrl();
+
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   const fetchAnalyzedPatients = async () => {
     setLoading(true);

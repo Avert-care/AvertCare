@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiBaseUrl, prewarmBackend } from "@/lib/api";
 
 type PatientProfile = {
   patient_id: string;
@@ -47,7 +48,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const { getFreshToken } = useAuth();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = getApiBaseUrl();
+
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   const loadData = async () => {
     setLoading(true);

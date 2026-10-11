@@ -146,6 +146,8 @@ class TestWardCensusEndpoints:
         r_pred = client.post("/api/predict", json=target)
         assert r_pred.status_code == 200
         pred_data = r_pred.json()
+        assert "risk_score" in pred_data
+        assert "risk_category" in pred_data
 
         # Check analyzed queue
         r_analyzed = client.get("/api/patients/analyzed")

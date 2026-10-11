@@ -5,9 +5,9 @@ Paper-thin router — all logic delegated to services.py and db.py.
 Auth dependency is a dev-bypass passthrough when FIREBASE_PROJECT_ID is unset.
 """
 
-from datetime import datetime, timezone
 import logging
 import time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -148,7 +148,7 @@ async def predict_readmission(
             "cms_penalty_saved_usd": response.cms_penalty_saved_usd,
             "relative_risk_ratio": response.relative_risk_ratio,
             "risk_percentile": response.risk_percentile,
-            "analyzed_at": datetime.now(timezone.utc).isoformat(),
+            "analyzed_at": datetime.now(UTC).isoformat(),
         })
         analyzed_record = AnalyzedRecord(**record_payload)
         db.save_analyzed_patient(analyzed_record)

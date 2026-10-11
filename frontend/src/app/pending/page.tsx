@@ -17,6 +17,7 @@ import {
   Filter,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiBaseUrl, prewarmBackend } from "@/lib/api";
 
 type PatientProfile = {
   patient_id: string;
@@ -43,7 +44,11 @@ export default function WardCensusPage() {
   const [filterDiag, setFilterDiag] = useState<string>("All");
 
   const { getFreshToken } = useAuth();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = getApiBaseUrl();
+
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   const fetchPendingPatients = async () => {
     setLoading(true);

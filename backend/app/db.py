@@ -6,17 +6,19 @@ and graceful in-memory fallback (mock_db) for local / offline execution.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import json
 import logging
-from typing import Optional
 
 import redis
 
 from app.core.config import settings
 from app.mock_db import (
     ANALYZED_PATIENTS as MOCK_ANALYZED_PATIENTS,
+)
+from app.mock_db import (
     PENDING_PATIENTS as MOCK_PENDING_PATIENTS,
+)
+from app.mock_db import (
     reset_mock_db,
 )
 from app.schemas import AnalyzedRecord, PatientProfile
@@ -27,10 +29,10 @@ REDIS_KEY_PENDING = "avertcare:patient:pending"
 REDIS_KEY_ANALYZED_PREFIX = "avertcare:patient:analyzed:"
 REDIS_KEY_ANALYZED_ZSET = "avertcare:analyzed_zset"
 
-_redis_client: Optional[redis.Redis] = None
+_redis_client: redis.Redis | None = None
 
 
-def get_redis() -> Optional[redis.Redis]:
+def get_redis() -> redis.Redis | None:
     global _redis_client
     if _redis_client is not None:
         return _redis_client
@@ -71,7 +73,7 @@ def get_pending_patients() -> list[PatientProfile]:
     return list(MOCK_PENDING_PATIENTS)
 
 
-def get_pending_patient_by_id(patient_id: str) -> Optional[PatientProfile]:
+def get_pending_patient_by_id(patient_id: str) -> PatientProfile | None:
     for p in get_pending_patients():
         if p.patient_id == patient_id:
             return p

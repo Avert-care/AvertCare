@@ -20,6 +20,12 @@ import {
   Info
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  fetchWithColdStartRetry,
+  getApiBaseUrl,
+  isHostedEnvironment,
+  prewarmBackend,
+} from "@/lib/api";
 
 // Types matching our Backend Pydantic Schemas
 type MedStatus = "No" | "Steady" | "Up" | "Down";
@@ -331,8 +337,13 @@ function AnalyzeContent() {
   const [ragError, setRagError] = useState<string | null>(null);
 
   const { getFreshToken } = useAuth();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = getApiBaseUrl();
   const noteTooShort = patient.clinical_note.trim().length < 10;
+
+  // Silently wake up the backend on page load so it is hot by the time the user clicks Analyze
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
 
   // Auto-fill chart if patient_id query param is present
   useEffect(() => {
@@ -447,16 +458,21 @@ function AnalyzeContent() {
         num_prior_admissions: patient.number_inpatient,
       });
 
-      setReviewStep("Searching similar stays…");
-      const ragResult = await Promise.allSettled([
-        fetch(`${API_URL}/api/twin-patients`, { method: "POST", headers, body }),
-      ]).then((results) => results[0]);
+      setReviewStep("Scoring discharge & searching similar stays…");
+      const [predictResult, ragResult] = await Promise.allSettled([
+        fetchWithColdStartRetry(
+          `${API_URL}/api/predict`,
+          { method: "POST", headers, body },
+          (msg) => setReviewStep(msg),
+        ),
+        fetchWithColdStartRetry(
+          `${API_URL}/api/twin-patients`,
+          { method: "POST", headers, body },
+          (msg) => setReviewStep(msg),
+        ),
+      ]);
 
-      setReviewStep("Scoring this discharge…");
-      const predictResult = await Promise.allSettled([
-        fetch(`${API_URL}/api/predict`, { method: "POST", headers, body }),
-      ]).then((results) => results[0]);
-
+      const isHosted = isHostedEnvironment();
       if (predictResult.status === "fulfilled") {
         const res = predictResult.value;
         if (res.ok) {
@@ -467,7 +483,11 @@ function AnalyzeContent() {
         }
       } else {
         setPredictData(null);
-        setPredictError("The API is not reachable.");
+        setPredictError(
+          isHosted
+            ? "Cloud engine is warming up from sleep. Please try once more in 5 seconds."
+            : "The API is not reachable."
+        );
       }
 
       if (ragResult.status === "fulfilled") {
@@ -480,7 +500,11 @@ function AnalyzeContent() {
         }
       } else {
         setRagData(null);
-        setRagError("The API is not reachable.");
+        setRagError(
+          isHosted
+            ? "Cloud engine is warming up from sleep. Please try once more in 5 seconds."
+            : "The API is not reachable."
+        );
       }
     } finally {
       setReviewStep(null);
