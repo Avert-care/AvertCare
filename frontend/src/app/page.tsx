@@ -286,7 +286,10 @@ const HIGH_UTIL_DISCHARGE: PatientEncounter = {
 function messageForStatus(status: number): string {
   if (status === 401) return "Sign in again. The login expired.";
   if (status === 422) return NOTE_HINT;
-  return String(status);
+  if (status === 502 || status === 503 || status === 504) {
+    return "The cloud API is warming up on Render. Please retry in 10-15 seconds.";
+  }
+  return `Service error (${status})`;
 }
 
 function riskTone(category: string): { bar: string; text: string } {
@@ -312,7 +315,21 @@ export default function Dashboard() {
   const [ragError, setRagError] = useState<string | null>(null);
 
   const { logout, user, getFreshToken } = useAuth();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  
+  // Intelligent URL resolution: If hosted on Vercel or any non-localhost domain,
+  // ensure we never attempt to query localhost:8000 even if NEXT_PUBLIC_API_URL is omitted.
+  const rawApiUrl = process.env.NEXT_PUBLIC_API_URL;
+  const isHosted =
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1";
+  const API_URL =
+    rawApiUrl && (!isHosted || !rawApiUrl.includes("localhost"))
+      ? rawApiUrl
+      : isHosted
+        ? "https://avertcare.onrender.com"
+        : "http://localhost:8000";
+
   const noteTooShort = patient.clinical_note.trim().length < 10;
 
   const applyPreset = (next: PatientEncounter) => {
@@ -363,7 +380,11 @@ export default function Dashboard() {
         }
       } else {
         setPredictData(null);
-        setPredictError("The API is not reachable.");
+        setPredictError(
+          isHosted
+            ? "Cloud API warming up or unreachable. Please retry in a few seconds."
+            : "The API is not reachable."
+        );
       }
 
       if (ragResult.status === "fulfilled") {
@@ -376,7 +397,11 @@ export default function Dashboard() {
         }
       } else {
         setRagData(null);
-        setRagError("The API is not reachable.");
+        setRagError(
+          isHosted
+            ? "Cloud API warming up or unreachable. Please retry in a few seconds."
+            : "The API is not reachable."
+        );
       }
     } finally {
       setReviewStep(null);

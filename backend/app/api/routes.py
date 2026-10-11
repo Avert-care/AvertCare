@@ -50,9 +50,8 @@ async def predict_readmission(
         return resp
     except Exception as exc:
         logger.exception(
-            "[API:PREDICT:ERROR] Inference failure for Patient=%s: %s",
+            "[API:PREDICT:ERROR] Inference failure for Patient=%s",
             payload.patient_id,
-            exc,
         )
         raise HTTPException(status_code=500, detail=f"Inference error: {exc}") from exc
 
@@ -88,8 +87,7 @@ async def retrieve_twin_patients(
         return resp
     except Exception as exc:
         logger.exception(
-            "[API:TWINS:ERROR] RAG retrieval failure for Patient=%s: %s",
+            "[API:TWINS:ERROR] RAG retrieval failure for Patient=%s",
             payload.patient_id,
-            exc,
         )
         raise HTTPException(status_code=500, detail=f"RAG retrieval error: {exc}") from exc
