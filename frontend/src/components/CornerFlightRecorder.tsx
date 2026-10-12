@@ -44,7 +44,7 @@ export function CornerFlightRecorder() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                    Flight Recorder
+                    Clinical AI Observability
                   </h4>
                   <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
                     Live Telemetry
@@ -191,7 +191,7 @@ export function CornerFlightRecorder() {
               ? "bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200"
               : "bg-slate-950/90 hover:bg-slate-900 border-cyan-500/40 hover:border-cyan-400 text-slate-200 hover:shadow-cyan-500/20"
           }`}
-          title="Click to open Clinical AI Flight Recorder (Prometheus & Grafana Telemetry)"
+          title="Click to open Clinical AI Observability (Prometheus & Grafana Telemetry)"
         >
           <span className="relative flex h-2.5 w-2.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -200,7 +200,7 @@ export function CornerFlightRecorder() {
 
           <div className="flex items-center gap-1.5 text-xs font-semibold">
             <Activity className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
-            <span className="text-white">Ops Flight Recorder</span>
+            <span className="text-white">Clinical AI Observability</span>
           </div>
 
           <div className="hidden sm:flex items-center gap-1 text-[11px] font-mono text-emerald-400 border-l border-slate-800 pl-2">

@@ -113,7 +113,7 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Discreet Corner Flight Recorder Entry */}
+      {/* Discreet Corner Observability Entry */}
       <div className="px-3 pt-2 pb-1 border-t border-slate-800/60 bg-slate-950/40">
         <Link
           href="/observability"
@@ -130,7 +130,7 @@ export function Sidebar() {
               <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
             </div>
             <div className="text-left">
-              <div className="leading-tight font-semibold text-slate-300">Ops Flight Recorder</div>
+              <div className="leading-tight font-semibold text-slate-300">Clinical AI Observability</div>
               <div className="text-[10px] text-slate-500">Prometheus • Grafana</div>
             </div>
           </div>

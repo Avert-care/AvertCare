@@ -120,7 +120,7 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2.5 self-start md:self-auto">
           <Link
             href="/observability"
-            title="Clinical AI Flight Recorder & Observability (Prometheus / Grafana)"
+            title="Clinical AI Observability (Prometheus / Grafana)"
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-cyan-300 bg-cyan-950/40 border border-cyan-800/60 rounded-xl hover:bg-cyan-900/40 hover:border-cyan-700 transition-colors shadow-sm"
           >
             <span className="relative flex h-2 w-2">
@@ -128,7 +128,7 @@ export default function DashboardPage() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <Activity className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Flight Recorder</span>
+            <span>Clinical AI Observability</span>
           </Link>
 
           <button
