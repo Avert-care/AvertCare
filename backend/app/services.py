@@ -363,7 +363,7 @@ def _safe_rag_retrieval(payload: PatientEncounter, k: int) -> TwinPatientRespons
             patient_id=payload.patient_id,
             rag_readmission_rate=rate,
             semantic_neighborhood_risk_index=snri,
-            sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
+            sdoh_flag=_extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)[0],
             twins=twins,
         )
     except Exception as exc:
@@ -446,7 +446,7 @@ def run_prediction(payload: PatientEncounter) -> PredictResponse:
             SHAPFeature(feature="age",                   impact=round((payload.age - 50) * 0.003, 3)),
         ]
         shap_features.sort(key=lambda x: abs(x.impact), reverse=True)
-        sdoh_flags = _extract_sdoh_flags(payload.clinical_note)
+        sdoh_flags = _extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)
         rel_risk_ratio, risk_pct = _calculate_relative_risk(raw_score)
         care_plan, plan_source, rationale = _compose_care(
             risk_category, raw_score, sdoh_flags, shap_features, [], _a1c(payload.a1c_result),
@@ -540,7 +540,7 @@ def run_prediction(payload: PatientEncounter) -> PredictResponse:
     except Exception as exc:
         logger.warning("SHAP explanation failed (%s); returning empty list.", exc)
 
-    sdoh_flags = _extract_sdoh_flags(payload.clinical_note)
+    sdoh_flags = _extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)
     logger.info("[PREDICT:SDOH] SDoH signals detected (%d): %s", len(sdoh_flags), ", ".join(sdoh_flags))
 
     twin_interventions: list[str] = []
@@ -685,7 +685,7 @@ def _qdrant_safe_retrieval(payload: PatientEncounter, k: int, expected: int) -> 
             patient_id=payload.patient_id,
             rag_readmission_rate=rate,
             semantic_neighborhood_risk_index=snri,
-            sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
+            sdoh_flag=_extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)[0],
             twins=twins,
         )
     except Exception as exc:
@@ -780,7 +780,7 @@ def _live_rag_retrieval(payload: PatientEncounter) -> TwinPatientResponse:
         patient_id=payload.patient_id,
         rag_readmission_rate=rag_rate,
         semantic_neighborhood_risk_index=snri,
-        sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
+        sdoh_flag=_extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)[0],
         twins=twins,
     )
 
@@ -836,7 +836,7 @@ def _mock_rag_retrieval(payload: PatientEncounter) -> TwinPatientResponse:
         patient_id=payload.patient_id,
         rag_readmission_rate=rag_rate,
         semantic_neighborhood_risk_index=snri,
-        sdoh_flag=_extract_sdoh_flags(payload.clinical_note)[0],
+        sdoh_flag=_extract_sdoh_flags(payload.clinical_note, payer_code=payload.payer_code)[0],
         twins=twins,
     )
 
@@ -1075,11 +1075,27 @@ _SDOH_KEYWORDS: dict[str, str] = {
 }
 
 
-def _extract_sdoh_flags(note: str) -> list[str]:
-    """Pattern-based SDoH extraction with deduplication."""
+def _extract_sdoh_flags(note: str, payer_code: str = "") -> list[str]:
+    """Pattern-based SDoH extraction with deduplication.
+    Also checks structured payer_code field so SP (uninsured) patients
+    always get a financial barrier flag regardless of note wording.
+    """
     note_lower = (note or "").lower()
     flags: list[str] = []
     seen = set()
+
+    # ── Structured payer code check (dataset field, always reliable) ──────
+    payer_upper = (payer_code or "").strip().upper()
+    if payer_upper in ("SP", "SELF-PAY", "SELF_PAY"):
+        label = "Uninsured (Self-Pay) — prescription cost-adherence risk"
+        flags.append(label)
+        seen.add(label)
+    elif payer_upper in ("MD", "MEDICAID"):
+        label = "Medicaid coverage — potential copay barrier"
+        flags.append(label)
+        seen.add(label)
+
+    # ── Free-text note keyword scan ───────────────────────────────────────
     for kw, label in _SDOH_KEYWORDS.items():
         if kw in note_lower and label not in seen:
             flags.append(label)
@@ -1094,10 +1110,14 @@ def _generate_rule_care_plan(risk: RiskCategory, sdoh_flags: list[str]) -> list[
         steps.append("Start a 72-hour post-discharge telehealth check-in.")
     if any("transport" in f.lower() for f in sdoh_flags):
         steps.append("Arrange non-emergency medical transport for follow-up appointments.")
-    if any("financial" in f.lower() or "uninsured" in f.lower() for f in sdoh_flags):
+    if any("financial" in f.lower() or "uninsured" in f.lower() or "self-pay" in f.lower()
+           or "copay" in f.lower() or "medicaid" in f.lower() for f in sdoh_flags):
         steps.append("Refer to the hospital financial navigator for prescription cost assistance.")
     if any("isolation" in f.lower() or "alone" in f.lower() for f in sdoh_flags):
         steps.append("Arrange a daily wellness check because the patient lives alone.")
+    if any("caregiver" in f.lower() or "polypharmacy" in f.lower() for f in sdoh_flags):
+        steps.append("Conduct pharmacist-led medication reconciliation before discharge.")
     steps.append("Conduct pharmacist-led medication reconciliation before discharge.")
     steps.append("Schedule a telephone follow-up within 7 days of discharge.")
     return steps
+

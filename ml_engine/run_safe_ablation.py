@@ -20,7 +20,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from xgboost import XGBClassifier
 
@@ -165,24 +165,6 @@ def _candidates(X_train, y_train, X_val, y_val):
         ),
     ))
 
-    for depth, leaves in ((6, 31), (None, 63)):
-        label = f"HistGradientBoosting_d{depth}_l{leaves}"
-        built.append((
-            label,
-            HistGradientBoostingClassifier(
-                learning_rate=0.08,
-                max_depth=depth,
-                max_leaf_nodes=leaves,
-                max_iter=400,
-                l2_regularization=0.1,
-                early_stopping=True,
-                n_iter_no_change=25,
-                validation_fraction=0.1,
-                class_weight="balanced",
-                random_state=42,
-            ),
-        ))
-
     for depth, scaled in ((4, True), (6, True), (6, False), (8, True)):
         built.append((
             f"XGBoost_d{depth}_{'spw' if scaled else 'unweighted'}",
@@ -204,7 +186,7 @@ def _candidates(X_train, y_train, X_val, y_val):
 
 
 def _family(name: str) -> str:
-    for family in ("LogisticRegression", "RandomForest", "HistGradientBoosting", "XGBoost"):
+    for family in ("LogisticRegression", "RandomForest", "Transformer", "XGBoost"):
         if name.startswith(family):
             return family
     return name
@@ -223,10 +205,9 @@ def _pick_k(train, val, test, X_train, X_val, X_test, y_train, y_val):
             col = df[f"rag_readmit_rate_k{k}"].to_numpy(dtype=np.float32).reshape(-1, 1)
             return np.hstack([X, col])
 
-        model = HistGradientBoostingClassifier(
-            learning_rate=0.08, max_depth=8, max_leaf_nodes=31, max_iter=250,
-            early_stopping=True, n_iter_no_change=20, validation_fraction=0.1,
-            class_weight="balanced", random_state=42,
+        model = RandomForestClassifier(
+            n_estimators=100, max_depth=8, min_samples_leaf=10,
+            class_weight="balanced", random_state=42, n_jobs=-1,
         )
         model.fit(attach(X_train, train), y_train)
         p_val = model.predict_proba(attach(X_val, val))[:, 1]

@@ -38,8 +38,15 @@ type AnalyzedRecord = {
   time_in_hospital: number;
   num_medications: number;
   number_inpatient: number;
+  number_emergency: number;
+  number_outpatient: number;
   a1c_result: string;
   clinical_note: string;
+  payer_code: string;
+  admission_source_id: string;
+  medical_specialty: string;
+  race: string;
+  discharge_disposition: string;
   risk_score: number;
   risk_category: string;
   care_plan: string[];
@@ -52,6 +59,42 @@ type AnalyzedRecord = {
   risk_percentile?: number | null;
   analyzed_at?: string;
 };
+
+function payerLabel(code: string): { label: string; isUninsured: boolean; isMedicaid: boolean } {
+  const map: Record<string, string> = {
+    MC: "Medicare", MD: "Medicaid", SP: "Self-Pay (Uninsured)", BC: "Blue Cross/Shield",
+    HM: "HMO", CP: "Commercial/Private", CM: "CHAMPUS/Military", OG: "Other Govt",
+    PO: "PPO", DM: "Dept of Defense", CH: "Charity Care", WC: "Workers Comp",
+    UN: "Unknown", OT: "Other", MP: "Managed Plan", SI: "Self-Insured",
+    Medicare: "Medicare", Medicaid: "Medicaid", Private: "Private Insurance",
+    Unknown: "Unknown",
+  };
+  return {
+    label: map[code] ?? code,
+    isUninsured: code === "SP" || code === "Self-Pay",
+    isMedicaid: code === "MD" || code === "Medicaid",
+  };
+}
+
+function admissionSourceLabel(src: string): string {
+  const map: Record<string, string> = {
+    "7": "Emergency Room", Emergency_Room: "Emergency Room",
+    "1": "Physician Referral", Physician_Referral: "Physician Referral",
+    "2": "Clinic Referral", Clinic_Referral: "Clinic Referral",
+    "4": "Hospital Transfer", "5": "SNF Transfer", "6": "Facility Transfer",
+    Other: "Other",
+  };
+  return map[src] ?? src.replaceAll("_", " ");
+}
+
+function dischargeDestLabel(code: string): string {
+  const map: Record<string, string> = {
+    "1": "Home", "2": "Another Hospital", "3": "Skilled Nursing Facility",
+    "4": "Intermediate Care", "5": "Other Inpatient", "6": "Home + Health Service",
+    "7": "Left AMA", "22": "Rehab Facility",
+  };
+  return map[code] ?? `Destination ${code}`;
+}
 
 function getRiskBadge(score: number) {
   if (score > 0.5) {
@@ -82,14 +125,17 @@ function shapLabel(feature: string): string {
   const named: Record<string, string> = {
     "num__number_inpatient": "Prior inpatient visits",
     "num__total_prior_visits": "Total prior visits",
-    "num__number_emergency": "Emergency visits",
+    "num__number_emergency": "Emergency visits (12mo)",
+    "num__number_outpatient": "Outpatient clinic visits (12mo)",
     "num__number_diagnoses": "Diagnosis count",
     "num__time_in_hospital": "Length of stay",
     "num__age_numeric": "Age",
     "num__num_medications": "Medication count",
     "num__num_meds_active": "Active diabetes meds",
+    "num__num_med_changes": "Medication regimen changes",
     "num__num_lab_procedures": "Lab procedures",
     "rag_readmit_rate": "Similar-patient readmit rate",
+    // Discharge destinations
     "cat__discharge_disposition_id_1": "Discharged home",
     "cat__discharge_disposition_id_2": "Transferred to another hospital",
     "cat__discharge_disposition_id_3": "Discharged to skilled nursing",
@@ -99,10 +145,51 @@ function shapLabel(feature: string): string {
     "cat__discharge_disposition_id_7": "Left against medical advice",
     "cat__discharge_disposition_id_22": "Discharged to rehab",
     "cat__discharge_disposition_id_Other": "Other discharge destination",
+    // Diagnosis groups
     "cat__diag_1_group_Diabetes": "Primary diagnosis: diabetes",
     "cat__diag_1_group_Circulatory": "Primary diagnosis: circulatory",
     "cat__diag_1_group_Respiratory": "Primary diagnosis: respiratory",
+    "cat__diag_1_group_Genitourinary": "Primary diagnosis: genitourinary/kidney",
+    "cat__diag_1_group_Digestive": "Primary diagnosis: digestive",
+    "cat__diag_1_group_Musculoskeletal": "Primary diagnosis: musculoskeletal",
+    "cat__diag_1_group_Neoplasms": "Primary diagnosis: neoplasms",
+    "cat__diag_1_group_Injury": "Primary diagnosis: injury/trauma",
+    "cat__diag_1_group_Other": "Primary diagnosis: other",
+    // Payer/insurance codes
     "cat__payer_code_Unknown": "Payer unknown",
+    "cat__payer_code_SP": "Self-pay / Uninsured",
+    "cat__payer_code_MC": "Medicare coverage",
+    "cat__payer_code_MD": "Medicaid coverage",
+    "cat__payer_code_BC": "Blue Cross/Shield coverage",
+    "cat__payer_code_HM": "HMO coverage",
+    "cat__payer_code_CP": "Commercial/private insurance",
+    "cat__payer_code_CM": "CHAMPUS/Military insurance",
+    // A1C result
+    "cat__A1Cresult_>8": "A1C very high (>8)",
+    "cat__A1Cresult_>7": "A1C elevated (>7)",
+    "cat__A1Cresult_Norm": "A1C normal",
+    "cat__a1c_result_>8": "A1C very high (>8)",
+    "cat__a1c_result_>7": "A1C elevated (>7)",
+    "cat__a1c_result_Norm": "A1C normal",
+    // Medical specialty
+    "cat__medical_specialty_Cardiology": "Cardiology department",
+    "cat__medical_specialty_Emergency/Trauma": "Emergency/Trauma department",
+    "cat__medical_specialty_InternalMedicine": "Internal Medicine",
+    "cat__medical_specialty_Nephrology": "Nephrology department",
+    "cat__medical_specialty_Surgery-General": "General Surgery",
+    "cat__medical_specialty_Unknown": "Specialty unrecorded",
+    // Admission type / source
+    "cat__admission_type_id_1": "Emergency admission",
+    "cat__admission_type_id_2": "Urgent admission",
+    "cat__admission_type_id_3": "Elective admission",
+    "cat__admission_source_id_7": "Admitted from ER",
+    "cat__admission_source_id_1": "Physician referral",
+    // Medications
+    "cat__insulin_Up": "Insulin dose increased",
+    "cat__insulin_Down": "Insulin dose decreased",
+    "cat__insulin_Steady": "Insulin dose steady",
+    "cat__change_Ch": "Diabetes regimen changed",
+    "cat__diabetesMed_Yes": "On diabetes medication",
   };
   return named[feature] ?? feature.replace(/^num__|^cat__/, "").replaceAll("_", " ");
 }
@@ -422,6 +509,84 @@ export default function AlertsPage() {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Patient Clinical Profile */}
+            <div className="p-4 rounded-xl bg-slate-950/50 border border-slate-800/80 space-y-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                <Bed className="w-3.5 h-3.5 text-cyan-400" />
+                Patient Clinical Profile
+              </h3>
+
+              {/* Insurance + Admission Info Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(() => {
+                  const payer = payerLabel(selectedRecord.payer_code || "Unknown");
+                  return (
+                    <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Insurance</div>
+                      <div className={`text-xs font-semibold ${
+                        payer.isUninsured ? "text-rose-400" : payer.isMedicaid ? "text-amber-400" : "text-slate-200"
+                      }`}>
+                        {payer.label}
+                      </div>
+                      {payer.isUninsured && (
+                        <div className="text-[10px] text-rose-400 mt-0.5">⚠ No coverage</div>
+                      )}
+                    </div>
+                  );
+                })()}
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Admitted Via</div>
+                  <div className="text-xs font-semibold text-slate-200">
+                    {admissionSourceLabel(selectedRecord.admission_source_id || "Other")}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Discharge To</div>
+                  <div className="text-xs font-semibold text-slate-200">
+                    {dischargeDestLabel(selectedRecord.discharge_disposition || "1")}
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Specialty</div>
+                  <div className="text-xs font-semibold text-slate-200">
+                    {(selectedRecord.medical_specialty || "Unknown").replaceAll("_", " ")}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">{selectedRecord.race || ""}</div>
+                </div>
+              </div>
+
+              {/* Prior Hospitalization History */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Inpatient (12mo)</div>
+                  <div className={`text-xl font-bold ${
+                    (selectedRecord.number_inpatient || 0) >= 3 ? "text-rose-400" :
+                    (selectedRecord.number_inpatient || 0) >= 1 ? "text-amber-400" : "text-emerald-400"
+                  }`}>
+                    {selectedRecord.number_inpatient ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500">prior admissions</div>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">ER Visits (12mo)</div>
+                  <div className={`text-xl font-bold ${
+                    (selectedRecord.number_emergency || 0) >= 2 ? "text-rose-400" :
+                    (selectedRecord.number_emergency || 0) >= 1 ? "text-amber-400" : "text-slate-400"
+                  }`}>
+                    {selectedRecord.number_emergency ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500">emergency visits</div>
+                </div>
+                <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Outpatient (12mo)</div>
+                  <div className="text-xl font-bold text-blue-400">
+                    {selectedRecord.number_outpatient ?? 0}
+                  </div>
+                  <div className="text-[10px] text-slate-500">clinic visits</div>
+                </div>
+              </div>
             </div>
 
             {/* Prescriptive Care Plan */}

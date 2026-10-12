@@ -214,6 +214,7 @@ class FTTransformerClassifier(BaseEstimator, ClassifierMixin):
 
                 val_loss /= len(val_dataset)
                 scheduler.step(val_loss)
+                print(f"    Epoch {epoch}/{self.epochs} - train_loss: {train_loss:.4f} val_loss: {val_loss:.4f}", flush=True)
 
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss

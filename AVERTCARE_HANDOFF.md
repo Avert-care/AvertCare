@@ -35,6 +35,14 @@
   * **Moderate Risk**: Risk score between $0.12$ and $0.20$.
   * **Low Risk**: Risk score $< 0.12$.
 
+### Tabular Deep Learning: FT-Transformer (Safe Data)
+* **Architecture**: Feature Tokenizer + 3-layer `TransformerEncoder` with 4 attention heads ($d=64$, $d_{ff}=128$).
+* **Safe RAG Benchmark** ([`ml_engine/metrics/ft_transformer_safe_metrics.json`](file:///c:/Drive%20D/cognizant/AvertCare/ml_engine/metrics/ft_transformer_safe_metrics.json)):
+  * **Tabular Only**: Test AUROC `0.6611`, Test AUPRC `0.2173`, Test Recall `51.15%` at threshold `0.14`.
+  * **Tabular + Safe RAG ($k=10$)**: Test AUROC `0.6676`, Test AUPRC `0.2265`, Test Precision `20.84%` at threshold `0.13` ($\Delta\text{AUROC} = +0.0065$, $\Delta\text{AUPRC} = +0.0092$).
+* **Artifacts**: Weights preserved in [`ml_engine/models/ft_transformer.pt`](file:///c:/Drive%20D/cognizant/AvertCare/ml_engine/models/ft_transformer.pt) and [`ml_engine/models/ft_rag.pt`](file:///c:/Drive%20D/cognizant/AvertCare/ml_engine/models/ft_rag.pt).
+* *Note*: HistGradientBoosting has been completely removed from all pipelines and reports.
+
 ---
 
 ## 🧠 3. Subsystem Functionality & Boundaries

@@ -72,32 +72,6 @@
       "threshold": 0.31
     },
     {
-      "model": "HistGradientBoosting_d6_l31",
-      "family": "HistGradientBoosting",
-      "features": "tabular",
-      "val_auroc": 0.6838,
-      "val_auprc": 0.2336,
-      "test_auroc": 0.6716,
-      "test_auprc": 0.2494,
-      "test_f1": 0.2929,
-      "test_precision": 0.2233,
-      "test_recall": 0.4258,
-      "threshold": 0.56
-    },
-    {
-      "model": "HistGradientBoosting_dNone_l63",
-      "family": "HistGradientBoosting",
-      "features": "tabular",
-      "val_auroc": 0.6792,
-      "val_auprc": 0.2293,
-      "test_auroc": 0.6707,
-      "test_auprc": 0.2488,
-      "test_f1": 0.2901,
-      "test_precision": 0.2051,
-      "test_recall": 0.4956,
-      "threshold": 0.52
-    },
-    {
       "model": "XGBoost_d4_spw",
       "family": "XGBoost",
       "features": "tabular",
@@ -215,32 +189,6 @@
       "threshold": 0.32
     },
     {
-      "model": "HistGradientBoosting_d6_l31",
-      "family": "HistGradientBoosting",
-      "features": "tabular+rag_k10",
-      "val_auroc": 0.6812,
-      "val_auprc": 0.2342,
-      "test_auroc": 0.6735,
-      "test_auprc": 0.2504,
-      "test_f1": 0.2911,
-      "test_precision": 0.2231,
-      "test_recall": 0.4187,
-      "threshold": 0.56
-    },
-    {
-      "model": "HistGradientBoosting_dNone_l63",
-      "family": "HistGradientBoosting",
-      "features": "tabular+rag_k10",
-      "val_auroc": 0.6827,
-      "val_auprc": 0.2336,
-      "test_auroc": 0.6717,
-      "test_auprc": 0.2438,
-      "test_f1": 0.292,
-      "test_precision": 0.2326,
-      "test_recall": 0.3922,
-      "threshold": 0.5700000000000001
-    },
-    {
       "model": "XGBoost_d4_spw",
       "family": "XGBoost",
       "features": "tabular+rag_k10",
@@ -291,6 +239,32 @@
       "test_precision": 0.2081,
       "test_recall": 0.4461,
       "threshold": 0.53
+    },
+    {
+      "model": "FT_Transformer",
+      "family": "Transformer",
+      "features": "tabular",
+      "val_auroc": 0.6695,
+      "val_auprc": 0.2197,
+      "test_auroc": 0.6611,
+      "test_auprc": 0.2173,
+      "test_f1": 0.2748,
+      "test_precision": 0.1879,
+      "test_recall": 0.5115,
+      "threshold": 0.14
+    },
+    {
+      "model": "FT_Transformer",
+      "family": "Transformer",
+      "features": "tabular+rag_k10",
+      "val_auroc": 0.6744,
+      "val_auprc": 0.2279,
+      "test_auroc": 0.6676,
+      "test_auprc": 0.2265,
+      "test_f1": 0.2839,
+      "test_precision": 0.2084,
+      "test_recall": 0.4452,
+      "threshold": 0.13
     }
   ],
   "winner": {

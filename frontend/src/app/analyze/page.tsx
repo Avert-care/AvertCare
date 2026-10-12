@@ -26,6 +26,7 @@ import {
   isHostedEnvironment,
   prewarmBackend,
 } from "@/lib/api";
+import { parsePayerInfo } from "@/components/PatientDetailModal";
 
 // Types matching our Backend Pydantic Schemas
 type MedStatus = "No" | "Steady" | "Up" | "Down";
@@ -102,14 +103,17 @@ function shapLabel(feature: string): string {
   const named: Record<string, string> = {
     "num__number_inpatient": "Prior inpatient visits",
     "num__total_prior_visits": "Total prior visits",
-    "num__number_emergency": "Emergency visits",
+    "num__number_emergency": "Emergency visits (12mo)",
+    "num__number_outpatient": "Outpatient clinic visits (12mo)",
     "num__number_diagnoses": "Diagnosis count",
     "num__time_in_hospital": "Length of stay",
     "num__age_numeric": "Age",
     "num__num_medications": "Medication count",
     "num__num_meds_active": "Active diabetes meds",
+    "num__num_med_changes": "Medication regimen changes",
     "num__num_lab_procedures": "Lab procedures",
     "rag_readmit_rate": "Similar-patient readmit rate",
+    // Discharge destinations
     "cat__discharge_disposition_id_1": "Discharged home",
     "cat__discharge_disposition_id_2": "Transferred to another hospital",
     "cat__discharge_disposition_id_3": "Discharged to skilled nursing",
@@ -119,13 +123,55 @@ function shapLabel(feature: string): string {
     "cat__discharge_disposition_id_7": "Left against medical advice",
     "cat__discharge_disposition_id_22": "Discharged to rehab",
     "cat__discharge_disposition_id_Other": "Other discharge destination",
+    // Diagnosis groups
     "cat__diag_1_group_Diabetes": "Primary diagnosis: diabetes",
     "cat__diag_1_group_Circulatory": "Primary diagnosis: circulatory",
     "cat__diag_1_group_Respiratory": "Primary diagnosis: respiratory",
+    "cat__diag_1_group_Genitourinary": "Primary diagnosis: genitourinary/kidney",
+    "cat__diag_1_group_Digestive": "Primary diagnosis: digestive",
+    "cat__diag_1_group_Musculoskeletal": "Primary diagnosis: musculoskeletal",
+    "cat__diag_1_group_Neoplasms": "Primary diagnosis: neoplasms",
+    "cat__diag_1_group_Injury": "Primary diagnosis: injury/trauma",
+    "cat__diag_1_group_Other": "Primary diagnosis: other",
+    // Payer/insurance codes
     "cat__payer_code_Unknown": "Payer unknown",
+    "cat__payer_code_SP": "Self-pay / Uninsured",
+    "cat__payer_code_MC": "Medicare coverage",
+    "cat__payer_code_MD": "Medicaid coverage",
+    "cat__payer_code_BC": "Blue Cross/Shield coverage",
+    "cat__payer_code_HM": "HMO coverage",
+    "cat__payer_code_CP": "Commercial/private insurance",
+    "cat__payer_code_CM": "CHAMPUS/Military insurance",
+    // A1C result
+    "cat__A1Cresult_>8": "A1C very high (>8)",
+    "cat__A1Cresult_>7": "A1C elevated (>7)",
+    "cat__A1Cresult_Norm": "A1C normal",
+    "cat__a1c_result_>8": "A1C very high (>8)",
+    "cat__a1c_result_>7": "A1C elevated (>7)",
+    "cat__a1c_result_Norm": "A1C normal",
+    // Medical specialty
+    "cat__medical_specialty_Cardiology": "Cardiology department",
+    "cat__medical_specialty_Emergency/Trauma": "Emergency/Trauma department",
+    "cat__medical_specialty_InternalMedicine": "Internal Medicine",
+    "cat__medical_specialty_Nephrology": "Nephrology department",
+    "cat__medical_specialty_Surgery-General": "General Surgery",
+    "cat__medical_specialty_Unknown": "Specialty unrecorded",
+    // Admission type / source
+    "cat__admission_type_id_1": "Emergency admission",
+    "cat__admission_type_id_2": "Urgent admission",
+    "cat__admission_type_id_3": "Elective admission",
+    "cat__admission_source_id_7": "Admitted from ER",
+    "cat__admission_source_id_1": "Physician referral",
+    // Medications
+    "cat__insulin_Up": "Insulin dose increased",
+    "cat__insulin_Down": "Insulin dose decreased",
+    "cat__insulin_Steady": "Insulin dose steady",
+    "cat__change_Ch": "Diabetes regimen changed",
+    "cat__diabetesMed_Yes": "On diabetes medication",
   };
   return named[feature] ?? feature.replace(/^num__|^cat__/, "").replaceAll("_", " ");
 }
+
 
 type SHAPFeature = {
   feature: string;
@@ -187,7 +233,20 @@ const SPECIALTIES = [
   "Orthopedics-Reconstructive", "Nephrology", "Radiologist", "Other",
 ];
 const RACES = ["Unknown", "Caucasian", "AfricanAmerican", "Hispanic", "Asian", "Other"];
-const PAYERS = ["Unknown", "MC", "HM", "SP", "BC", "MD", "CP", "UN", "CM", "OG", "PO", "DM", "CH", "WC", "OT", "MP", "SI"];
+const PAYER_OPTIONS = [
+  { value: "SP", label: "SP — Self-Pay (Uninsured)" },
+  { value: "MC", label: "MC — Medicare" },
+  { value: "MD", label: "MD — Medicaid" },
+  { value: "BC", label: "BC — Blue Cross (Private)" },
+  { value: "HM", label: "HM — HMO (Private)" },
+  { value: "CP", label: "CP — Commercial (Private)" },
+  { value: "Private", label: "Commercial / Private Insurance" },
+  { value: "Medicare", label: "Medicare Program" },
+  { value: "Medicaid", label: "Medicaid Assistance" },
+  { value: "UN", label: "UN — Unknown / Not Documented" },
+  { value: "Unknown", label: "Unknown" },
+];
+const PAYERS = PAYER_OPTIONS.map((o) => o.value);
 const ADMISSION_TYPES = [
   { value: "1", label: "1 Emergency" },
   { value: "2", label: "2 Urgent" },
@@ -335,15 +394,28 @@ function AnalyzeContent() {
   const [ragData, setRagData] = useState<TwinPatientResponse | null>(null);
   const [predictError, setPredictError] = useState<string | null>(null);
   const [ragError, setRagError] = useState<string | null>(null);
+  const [censusPatients, setCensusPatients] = useState<any[]>([]);
 
   const { getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
   const noteTooShort = patient.clinical_note.trim().length < 10;
 
-  // Silently wake up the backend on page load so it is hot by the time the user clicks Analyze
+  // Prewarm backend and fetch active ward census inpatients
   useEffect(() => {
     prewarmBackend();
-  }, []);
+    async function fetchCensus() {
+      try {
+        const res = await fetch(`${API_URL}/api/patients/pending`);
+        if (res.ok) {
+          const list = await res.json();
+          setCensusPatients(list);
+        }
+      } catch (e) {
+        console.error("Failed to load census list:", e);
+      }
+    }
+    fetchCensus();
+  }, [API_URL]);
 
   // Auto-fill chart if patient_id query param is present
   useEffect(() => {
@@ -429,6 +501,58 @@ function AnalyzeContent() {
     setPatient(next);
     setPatientMeta(null);
     setAutoFillNotice(null);
+    setPredictData(null);
+    setRagData(null);
+    setPredictError(null);
+    setRagError(null);
+  };
+
+  const selectCensusPatient = (p: any) => {
+    setPatient({
+      patient_id: p.patient_id,
+      age: p.age,
+      primary_diagnosis: p.primary_diagnosis,
+      time_in_hospital: p.time_in_hospital,
+      num_prior_admissions: p.num_prior_admissions ?? p.number_inpatient ?? 0,
+      num_medications: p.num_medications,
+      clinical_note: p.clinical_note,
+      a1c_result: p.a1c_result ?? "None",
+      number_inpatient: p.number_inpatient ?? 0,
+      number_emergency: p.number_emergency ?? 0,
+      number_diagnoses: p.number_diagnoses ?? 1,
+      diabetes_med: p.diabetes_med ?? "No",
+      gender: p.gender ?? "Unknown",
+      discharge_disposition: p.discharge_disposition ?? "1",
+      diag_1_group: p.diag_1_group ?? "Diabetes",
+      num_lab_procedures: p.num_lab_procedures ?? 40,
+      num_procedures: p.num_procedures ?? 0,
+      number_outpatient: p.number_outpatient ?? 0,
+      admission_type_id: p.admission_type_id ?? "Other",
+      admission_source_id: p.admission_source_id ?? "Other",
+      change: p.change ?? "No",
+      diag_2_group: p.diag_2_group ?? "Other",
+      diag_3_group: p.diag_3_group ?? "Other",
+      max_glu_serum: p.max_glu_serum ?? "Not_Tested",
+      medical_specialty: p.medical_specialty ?? "Unknown",
+      payer_code: p.payer_code ?? "Unknown",
+      race: p.race ?? "Unknown",
+      metformin: p.metformin ?? "No",
+      repaglinide: p.repaglinide ?? "No",
+      glimepiride: p.glimepiride ?? "No",
+      glipizide: p.glipizide ?? "No",
+      glyburide: p.glyburide ?? "No",
+      pioglitazone: p.pioglitazone ?? "No",
+      rosiglitazone: p.rosiglitazone ?? "No",
+      insulin: p.insulin ?? "No",
+    });
+
+    setPatientMeta({
+      patient_name: p.patient_name,
+      discharge_time: p.discharge_time ?? p.planned_discharge_time,
+      room_number: p.room_number,
+    });
+
+    setAutoFillNotice(`Active Inpatient: ${p.patient_name || p.patient_id} (${p.room_number || "Ward"})`);
     setPredictData(null);
     setRagData(null);
     setPredictError(null);
@@ -603,29 +727,112 @@ function AnalyzeContent() {
               </span>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 mb-6">
-              <button
-                type="button"
-                onClick={() => applyPreset(QUIET_DISCHARGE)}
-                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
+            {/* Quick Census Patient Selector */}
+            <div className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 mb-4">
+              <label className="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Select Patient from Ward Census:</span>
+                </span>
+                <span className="text-[10px] text-cyan-400 font-mono">
+                  {censusPatients.length} active
+                </span>
+              </label>
+              <select
+                className={`${fieldClass} text-xs font-medium cursor-pointer border-cyan-800/60 bg-slate-900/90`}
+                value={censusPatients.some((cp) => cp.patient_id === patient.patient_id) ? patient.patient_id : ""}
+                onChange={(e) => {
+                  const match = censusPatients.find((cp) => cp.patient_id === e.target.value);
+                  if (match) selectCensusPatient(match);
+                }}
               >
-                Quiet Discharge
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset(SAMPLE_CHART)}
-                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
-              >
-                Complex SDoH
-              </button>
-              <button
-                type="button"
-                onClick={() => applyPreset(HIGH_UTIL_DISCHARGE)}
-                className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
-              >
-                High-Utilizer
-              </button>
+                <option value="" disabled>-- Choose Ward Inpatient to Triage --</option>
+                {censusPatients.map((cp) => {
+                  const pInfo = parsePayerInfo(cp.payer_code);
+                  return (
+                    <option key={cp.patient_id} value={cp.patient_id}>
+                      {cp.patient_name} ({cp.patient_id}) — {cp.age}yo • {pInfo.label} • {cp.room_number}
+                    </option>
+                  );
+                })}
+              </select>
             </div>
+
+            {/* Benchmark Test Presets */}
+            <div className="space-y-1 mb-5">
+              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                Or Load Benchmark Case:
+              </span>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => applyPreset(QUIET_DISCHARGE)}
+                  className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
+                >
+                  Quiet Discharge
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset(SAMPLE_CHART)}
+                  className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
+                >
+                  Complex SDoH
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyPreset(HIGH_UTIL_DISCHARGE)}
+                  className="text-[11px] font-medium border border-slate-800 rounded-lg px-2 py-2 hover:bg-slate-800/70 text-slate-300 transition-colors text-center"
+                >
+                  High-Utilizer
+                </button>
+              </div>
+            </div>
+
+            {/* Active Patient Identity & Insurance Card */}
+            {(() => {
+              const currentPayer = parsePayerInfo(patient.payer_code);
+              return (
+                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/90 space-y-2.5 mb-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-sm text-white">
+                        {patientMeta?.patient_name || patient.patient_id}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        ({patient.age}yo {patient.gender !== "Unknown" ? patient.gender : ""})
+                      </span>
+                    </div>
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium border ${currentPayer.badgeClass}`}
+                    >
+                      {currentPayer.category === "uninsured" && "⚠ "}
+                      {currentPayer.label}
+                    </span>
+                  </div>
+
+                  {currentPayer.category === "uninsured" && (
+                    <div className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded">
+                      ⚠ Uninsured / Self-Pay: High financial barrier for discharge medications
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-850">
+                    <div className="bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Inpatient</span>
+                      <span className="text-xs font-bold text-white">{patient.number_inpatient}</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">ER Visits</span>
+                      <span className="text-xs font-bold text-white">{patient.number_emergency}</span>
+                    </div>
+                    <div className="bg-slate-900/60 p-1.5 rounded border border-slate-800">
+                      <span className="text-[10px] text-slate-500 block">Outpatient</span>
+                      <span className="text-xs font-bold text-white">{patient.number_outpatient}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -864,9 +1071,17 @@ function AnalyzeContent() {
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-slate-400">Payer code</label>
-                    <select className={`${fieldClass} cursor-pointer`} value={patient.payer_code} onChange={(e) => setPatient({ ...patient, payer_code: e.target.value })}>
-                      {PAYERS.map((code) => <option key={code} value={code}>{code}</option>)}
+                    <label className="text-xs text-slate-400">Insurance / Payer</label>
+                    <select
+                      className={`${fieldClass} cursor-pointer`}
+                      value={patient.payer_code}
+                      onChange={(e) => setPatient({ ...patient, payer_code: e.target.value })}
+                    >
+                      {PAYER_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-1">
@@ -969,6 +1184,83 @@ function AnalyzeContent() {
                 </div>
               )}
 
+              {/* Patient Clinical Profile & Context Banner in Results */}
+              {predictData && (() => {
+                const payer = parsePayerInfo(patient.payer_code);
+                const totalPriorVisits = (patient.number_inpatient || 0) + (patient.number_emergency || 0) + (patient.number_outpatient || 0);
+                return (
+                  <div className="p-5 rounded-xl bg-slate-900/90 border border-slate-800 shadow-md space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-xl bg-cyan-600/20 text-cyan-300 border border-cyan-500/30 flex items-center justify-center font-bold text-sm">
+                          {patientMeta?.patient_name ? patientMeta.patient_name[0] : "P"}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-white text-sm">
+                              {patientMeta?.patient_name || patient.patient_id}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-cyan-400 border border-slate-700">
+                              {patient.patient_id}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            {patient.age}yo {patient.gender !== "Unknown" ? patient.gender : ""} • {patient.race !== "Unknown" ? patient.race : ""} • {patientMeta?.room_number || "Ward Room"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${payer.badgeClass}`}>
+                          {payer.category === "uninsured" && "⚠ "}
+                          {payer.label}
+                        </span>
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                          Stay: {patient.time_in_hospital} days
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Patient Context Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <span className="text-slate-400 block text-[11px]">Insurance Status</span>
+                        <span className={`font-semibold ${payer.category === "uninsured" ? "text-rose-400" : "text-slate-200"}`}>
+                          {payer.category === "uninsured" ? "High Copay Risk (Self-Pay)" : payer.label}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <span className="text-slate-400 block text-[11px]">Hospitalization History</span>
+                        <span className={`font-semibold ${totalPriorVisits >= 3 ? "text-rose-400" : totalPriorVisits >= 1 ? "text-amber-400" : "text-emerald-400"}`}>
+                          {patient.number_inpatient} Inpatient / {patient.number_emergency} ER ({totalPriorVisits} total)
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <span className="text-slate-400 block text-[11px]">Glycemic Control</span>
+                        <span className={`font-semibold ${patient.a1c_result === ">8" ? "text-rose-400" : patient.a1c_result === ">7" ? "text-amber-400" : "text-emerald-400"}`}>
+                          A1C: {patient.a1c_result} • Insulin: {patient.insulin}
+                        </span>
+                      </div>
+                      <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80">
+                        <span className="text-slate-400 block text-[11px]">Primary Condition</span>
+                        <span className="font-semibold text-slate-200 truncate block" title={patient.primary_diagnosis}>
+                          {patient.primary_diagnosis}
+                        </span>
+                      </div>
+                    </div>
+
+                    {payer.category === "uninsured" && (
+                      <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+                        <span>
+                          <strong>SDoH Financial Alert:</strong> Patient lacks prescription coverage. Care plan automatically includes financial navigation to avoid insulin non-adherence.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {predictData && tone && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Risk Score */}
@@ -1054,14 +1346,38 @@ function AnalyzeContent() {
                       )}
                     </div>
                     <div className="space-y-3">
-                      {predictData.care_plan.map((step, idx) => (
-                        <div key={idx} className="flex gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
-                          <div className="w-6 h-6 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center text-xs font-bold shrink-0">
-                            {idx + 1}
+                      {predictData.care_plan.map((step, idx) => {
+                        const isFinancial = /financial|uninsured|navigator|copay|assistance/i.test(step);
+                        const isMedication = /pharmacist|medication|reconciliation|insulin|hba1c/i.test(step);
+                        const isTelehealth = /telehealth|follow-up|telephone|wellness/i.test(step);
+                        return (
+                          <div key={idx} className="flex items-start gap-3 bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+                            <div className="w-6 h-6 rounded-full bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                              {idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                                {isFinancial && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20">
+                                    🛡️ Financial Navigation
+                                  </span>
+                                )}
+                                {isMedication && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                                    💊 Pharmacotherapy
+                                  </span>
+                                )}
+                                {isTelehealth && (
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                                    🩺 Post-Discharge Monitoring
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs leading-relaxed text-slate-200">{step}</p>
+                            </div>
                           </div>
-                          <p className="text-xs leading-relaxed text-slate-200">{step}</p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     {predictData.clinical_rationale && (
                       <p className="text-xs text-slate-400 mt-4 pt-3 border-t border-slate-800/80 italic leading-relaxed">

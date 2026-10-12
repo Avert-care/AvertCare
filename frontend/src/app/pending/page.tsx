@@ -15,9 +15,11 @@ import {
   CheckCircle2,
   Calendar,
   Filter,
+  FileText,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiBaseUrl, prewarmBackend } from "@/lib/api";
+import PatientDetailModal from "@/components/PatientDetailModal";
 
 type PatientProfile = {
   patient_id: string;
@@ -32,9 +34,45 @@ type PatientProfile = {
   time_in_hospital: number;
   num_medications: number;
   number_inpatient: number;
+  number_emergency: number;
+  number_outpatient: number;
   a1c_result: string;
   clinical_note: string;
+  payer_code: string;
+  admission_source_id: string;
+  medical_specialty: string;
+  race: string;
 };
+
+function payerLabel(code: string): { label: string; isUninsured: boolean; isMedicaid: boolean } {
+  const map: Record<string, string> = {
+    MC: "Medicare", MD: "Medicaid", SP: "Self-Pay", BC: "Blue Cross",
+    HM: "HMO", CP: "Commercial", CM: "CHAMPUS", OG: "Other Govt",
+    PO: "PPO", DM: "Dept Military", CH: "Charity", WC: "Workers Comp",
+    UN: "Unknown", OT: "Other", MP: "Managed Plan", SI: "Self-Insured",
+    Medicare: "Medicare", Medicaid: "Medicaid", Private: "Private Ins.",
+    Unknown: "Unknown",
+  };
+  return {
+    label: map[code] ?? code,
+    isUninsured: code === "SP" || code === "Self-Pay",
+    isMedicaid: code === "MD" || code === "Medicaid",
+  };
+}
+
+function admissionSourceLabel(src: string): string {
+  const map: Record<string, string> = {
+    "7": "Emergency Room", Emergency_Room: "Emergency Room",
+    "1": "Physician Referral", Physician_Referral: "Physician Referral",
+    "2": "Clinic Referral", Clinic_Referral: "Clinic Referral",
+    "4": "Hospital Transfer",
+    "5": "SNF Transfer",
+    "6": "Facility Transfer",
+    "17": "Not Available",
+    Other: "Other",
+  };
+  return map[src] ?? src.replaceAll("_", " ");
+}
 
 export default function WardCensusPage() {
   const [patients, setPatients] = useState<PatientProfile[]>([]);
@@ -42,6 +80,7 @@ export default function WardCensusPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDiag, setFilterDiag] = useState<string>("All");
+  const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
 
   const { getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
@@ -204,9 +243,10 @@ export default function WardCensusPage() {
               <thead className="bg-slate-900/80 text-slate-400 uppercase tracking-wider text-[11px] font-semibold border-b border-slate-800">
                 <tr>
                   <th className="py-3.5 px-4">Patient / MRN</th>
-                  <th className="py-3.5 px-4">Room &amp; Ward</th>
-                  <th className="py-3.5 px-4">Primary Diagnosis</th>
-                  <th className="py-3.5 px-4">HbA1c &amp; Prior Admits</th>
+                  <th className="py-3.5 px-4">Room &amp; Admission</th>
+                  <th className="py-3.5 px-4">Diagnosis &amp; Specialty</th>
+                  <th className="py-3.5 px-4">Insurance</th>
+                  <th className="py-3.5 px-4">Utilization History</th>
                   <th className="py-3.5 px-4">Discharge Target</th>
                   <th className="py-3.5 px-4 text-right">Clinical Action</th>
                 </tr>
@@ -238,45 +278,80 @@ export default function WardCensusPage() {
                       </div>
                     </td>
 
-                    {/* Room */}
+                    {/* Room & Admission Source */}
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-1.5 font-medium text-slate-200">
                         <Bed className="w-3.5 h-3.5 text-cyan-400" />
                         <span>{p.room_number}</span>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Stay: {p.time_in_hospital} days</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Stay: {p.time_in_hospital}d</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Via: {admissionSourceLabel(p.admission_source_id || "Other")}
+                      </div>
                     </td>
 
-                    {/* Diagnosis */}
+                    {/* Diagnosis & Specialty */}
                     <td className="py-4 px-4 max-w-xs">
                       <div className="text-slate-200 line-clamp-1 font-medium" title={p.primary_diagnosis}>
                         {p.primary_diagnosis}
                       </div>
-                      <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/50">
-                        {p.diag_1_group}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-800/50">
+                          {p.diag_1_group}
+                        </span>
+                        {p.medical_specialty && p.medical_specialty !== "Unknown" && (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/50">
+                            {p.medical_specialty.replaceAll("_", " ")}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
-                    {/* Lab / Risk Signals */}
+                    {/* Insurance / Payer */}
+                    {(() => {
+                      const payer = payerLabel(p.payer_code || "Unknown");
+                      return (
+                        <td className="py-4 px-4">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                              payer.isUninsured
+                                ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                                : payer.isMedicaid
+                                ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                                : "bg-slate-700/60 text-slate-300 border border-slate-700"
+                            }`}
+                          >
+                            {payer.label}
+                          </span>
+                          {payer.isUninsured && (
+                            <div className="text-[10px] text-rose-400 mt-1 font-medium">⚠ Uninsured</div>
+                          )}
+                          <div className="text-[11px] text-slate-500 mt-1">
+                            A1C: <span className={p.a1c_result === ">8" ? "text-rose-400 font-semibold" : p.a1c_result === ">7" ? "text-amber-400" : "text-slate-400"}>{p.a1c_result}</span>
+                          </div>
+                        </td>
+                      );
+                    })()}
+
+                    {/* Utilization History */}
                     <td className="py-4 px-4">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
-                            p.a1c_result === ">8"
-                              ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
-                              : p.a1c_result === ">7"
-                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                              : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                          }`}
-                        >
-                          A1C: {p.a1c_result}
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          {p.number_inpatient} Prior Admits
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-1">
-                        {p.num_medications} active meds
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <span className="text-slate-500 w-16">Inpatient:</span>
+                          <span className={`font-semibold ${(p.number_inpatient || 0) >= 3 ? "text-rose-400" : (p.number_inpatient || 0) >= 1 ? "text-amber-400" : "text-emerald-400"}`}>
+                            {p.number_inpatient ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <span className="text-slate-500 w-16">ER Visits:</span>
+                          <span className={`font-semibold ${(p.number_emergency || 0) >= 2 ? "text-rose-400" : (p.number_emergency || 0) >= 1 ? "text-amber-400" : "text-slate-400"}`}>
+                            {p.number_emergency ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px]">
+                          <span className="text-slate-500 w-16">Outpatient:</span>
+                          <span className="text-slate-400">{p.number_outpatient ?? 0}</span>
+                        </div>
                       </div>
                     </td>
 
@@ -289,16 +364,27 @@ export default function WardCensusPage() {
                       <div className="text-[11px] text-slate-400 mt-0.5">Physician sign-off pending</div>
                     </td>
 
-                    {/* Action Button */}
+                    {/* Action Buttons */}
                     <td className="py-4 px-4 text-right">
-                      <Link
-                        href={`/analyze?patient_id=${p.patient_id}`}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium text-xs shadow-sm shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all group-hover:scale-105"
-                      >
-                        <Sparkles className="w-3 h-3 text-cyan-200" />
-                        <span>Analyze</span>
-                        <ArrowRight className="w-3 h-3 text-cyan-200" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPatient(p)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-colors"
+                          title="View complete clinical chart and notes"
+                        >
+                          <FileText className="w-3 h-3 text-cyan-400" />
+                          <span>View Chart</span>
+                        </button>
+                        <Link
+                          href={`/analyze?patient_id=${p.patient_id}`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-medium text-xs shadow-sm shadow-cyan-500/20 hover:shadow-cyan-500/40 transition-all"
+                        >
+                          <Sparkles className="w-3 h-3 text-cyan-200" />
+                          <span>Triage</span>
+                          <ArrowRight className="w-3 h-3 text-cyan-200" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -307,6 +393,13 @@ export default function WardCensusPage() {
           </div>
         )}
       </div>
+
+      {/* Patient Clinical Detail Modal */}
+      <PatientDetailModal
+        patient={selectedPatient}
+        isOpen={!!selectedPatient}
+        onClose={() => setSelectedPatient(null)}
+      />
     </div>
   );
 }

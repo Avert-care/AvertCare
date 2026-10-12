@@ -1,0 +1,94 @@
+{
+  "FT_Transformer_Tabular": {
+    "val_auroc": 0.6695,
+    "val_auprc": 0.2197,
+    "test_auroc": 0.6611,
+    "test_auprc": 0.2173,
+    "test_f1": 0.2748,
+    "test_precision": 0.1879,
+    "test_recall": 0.5115,
+    "threshold": 0.14,
+    "detailed_val": {
+      "threshold": 0.14,
+      "auroc": 0.6695,
+      "auprc": 0.2197,
+      "accuracy": 0.7005,
+      "precision": 0.1927,
+      "recall_sensitivity": 0.5106,
+      "specificity": 0.7249,
+      "f1_score": 0.2798,
+      "log_loss": 0.3352,
+      "brier_score": 0.0965,
+      "confusion_matrix": {
+        "true_negative": 6381,
+        "false_positive": 2421,
+        "false_negative": 554,
+        "true_positive": 578
+      }
+    },
+    "detailed_test": {
+      "threshold": 0.14,
+      "auroc": 0.6611,
+      "auprc": 0.2173,
+      "accuracy": 0.6924,
+      "precision": 0.1879,
+      "recall_sensitivity": 0.5115,
+      "specificity": 0.7157,
+      "f1_score": 0.2748,
+      "log_loss": 0.3368,
+      "brier_score": 0.0968,
+      "confusion_matrix": {
+        "true_negative": 6300,
+        "false_positive": 2503,
+        "false_negative": 553,
+        "true_positive": 579
+      }
+    }
+  },
+  "FT_Transformer_Tabular_RAG_k10": {
+    "val_auroc": 0.6744,
+    "val_auprc": 0.2279,
+    "test_auroc": 0.6676,
+    "test_auprc": 0.2265,
+    "test_f1": 0.2839,
+    "test_precision": 0.2084,
+    "test_recall": 0.4452,
+    "threshold": 0.13,
+    "detailed_val": {
+      "threshold": 0.13,
+      "auroc": 0.6744,
+      "auprc": 0.2279,
+      "accuracy": 0.7443,
+      "precision": 0.2086,
+      "recall_sensitivity": 0.4452,
+      "specificity": 0.7828,
+      "f1_score": 0.2841,
+      "log_loss": 0.3361,
+      "brier_score": 0.0965,
+      "confusion_matrix": {
+        "true_negative": 6890,
+        "false_positive": 1912,
+        "false_negative": 628,
+        "true_positive": 504
+      }
+    },
+    "detailed_test": {
+      "threshold": 0.13,
+      "auroc": 0.6676,
+      "auprc": 0.2265,
+      "accuracy": 0.744,
+      "precision": 0.2084,
+      "recall_sensitivity": 0.4452,
+      "specificity": 0.7825,
+      "f1_score": 0.2839,
+      "log_loss": 0.3373,
+      "brier_score": 0.0965,
+      "confusion_matrix": {
+        "true_negative": 6888,
+        "false_positive": 1915,
+        "false_negative": 628,
+        "true_positive": 504
+      }
+    }
+  }
+}
