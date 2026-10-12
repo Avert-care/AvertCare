@@ -113,6 +113,33 @@ export function Sidebar() {
         })}
       </nav>
 
+      {/* Discreet Corner Flight Recorder Entry */}
+      <div className="px-3 pt-2 pb-1 border-t border-slate-800/60 bg-slate-950/40">
+        <Link
+          href="/observability"
+          className={`flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all group ${
+            pathname === "/observability"
+              ? "bg-cyan-950/80 text-cyan-300 border border-cyan-500/40 shadow-sm"
+              : "text-slate-400 hover:text-slate-200 hover:bg-slate-900/60 border border-transparent hover:border-slate-800/60"
+          }`}
+          title="Clinical Decision Support Observability & Telemetry"
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <Activity className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+            </div>
+            <div className="text-left">
+              <div className="leading-tight font-semibold text-slate-300">Ops Flight Recorder</div>
+              <div className="text-[10px] text-slate-500">Prometheus • Grafana</div>
+            </div>
+          </div>
+          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/40 font-mono">
+            P95 OK
+          </span>
+        </Link>
+      </div>
+
       {/* Clinician Profile Footer */}
       <div className="p-4 border-t border-slate-800/70 bg-slate-950/60">
         <div className="flex items-center justify-between">

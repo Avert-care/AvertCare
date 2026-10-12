@@ -116,14 +116,29 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-300 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:text-white transition-colors self-start md:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-cyan-400" : ""}`} />
-          Refresh Stats
-        </button>
+        <div className="flex items-center gap-2.5 self-start md:self-auto">
+          <Link
+            href="/observability"
+            title="Clinical AI Flight Recorder & Observability (Prometheus / Grafana)"
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-cyan-300 bg-cyan-950/40 border border-cyan-800/60 rounded-xl hover:bg-cyan-900/40 hover:border-cyan-700 transition-colors shadow-sm"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Flight Recorder</span>
+          </Link>
+
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-300 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-850 hover:text-white transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-cyan-400" : ""}`} />
+            Refresh Stats
+          </button>
+        </div>
       </div>
 
       {/* Primary KPI Grid */}

@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { LoginModal } from "@/components/LoginModal";
 import { Sidebar } from "@/components/Sidebar";
+import { CornerFlightRecorder } from "@/components/CornerFlightRecorder";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -45,6 +46,7 @@ export default function RootLayout({
                 {children}
               </div>
             </div>
+            <CornerFlightRecorder />
           </AuthProvider>
         </ThemeProvider>
       </body>
