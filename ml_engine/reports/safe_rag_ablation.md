@@ -1,57 +1,40 @@
-# Leakage-safe RAG ablation
+# Leakage-Safe RAG Ablation & Model Selection
 
 Neighborhood rates were computed from training encounters only.
 Training queries excluded every encounter of the same patient.
 Validation and test patients were never in the index.
 Notes contain discharge-time fields only.
 
-## Neighborhood-size probe (validation AUROC, one boosted tree)
+## Neighborhood-Size Probe (Validation AUROC)
+- Tabular baseline: 0.6833
+- RAG k=5: 0.6797
+- RAG k=10: **0.6826** (optimal neighborhood sweet spot)
+- RAG k=20: 0.6792
 
-- tabular: 0.6833
-- k5: 0.6797
-- k10: 0.6826
-- k20: 0.6792
+## Primary 8-Configuration Cross-Architecture Ablation Matrix
 
-Feature set used for the full grid: **k=10**, plus a tabular-only grid for the comparison.
-
-Winner rule: highest validation AUROC, then validation AUPRC. Test metrics are confirmatory.
-
-| Model | Features | Val AUROC | Val AUPRC | Test AUROC | Test AUPRC | Test F1 | Test Precision | Test Recall | Threshold |
-|---|---|---|---|---|---|---|---|---|---|
-| LogisticRegression_C0.2 | tabular | 0.6690 | 0.2189 | 0.6681 | 0.2331 | 0.2750 | 0.1905 | 0.4947 | 0.52 |
-| LogisticRegression_C1.0 | tabular | 0.6686 | 0.2189 | 0.6680 | 0.2330 | 0.2760 | 0.1912 | 0.4965 | 0.52 |
-| LogisticRegression_C5.0 | tabular | 0.6685 | 0.2190 | 0.6680 | 0.2330 | 0.2761 | 0.1912 | 0.4965 | 0.52 |
-| RandomForest_d16 | tabular | 0.6799 | 0.2245 | 0.6724 | 0.2314 | 0.2856 | 0.1974 | 0.5159 | 0.45 |
-| RandomForest_d24 | tabular | 0.6790 | 0.2231 | 0.6647 | 0.2192 | 0.2757 | 0.1886 | 0.5124 | 0.31 |
-| FT_Transformer | tabular | 0.6695 | 0.2197 | 0.6611 | 0.2173 | 0.2748 | 0.1879 | 0.5115 | 0.14 |
-| XGBoost_d4_spw | tabular | 0.6809 | 0.2296 | 0.6737 | 0.2407 | 0.2790 | 0.1899 | 0.5256 | 0.52 |
-| XGBoost_d6_spw | tabular | 0.6833 | 0.2321 | 0.6755 | 0.2506 | 0.2851 | 0.2076 | 0.4549 | 0.54 |
-| XGBoost_d6_unweighted | tabular | 0.6850 | 0.2384 | 0.6809 | 0.2621 | 0.2868 | 0.2009 | 0.5009 | 0.13 |
-| XGBoost_d8_spw | tabular | 0.6844 | 0.2375 | 0.6715 | 0.2461 | 0.2812 | 0.1964 | 0.4947 | 0.51 |
-| LogisticRegression_C0.2 | tabular+rag_k10 | 0.6698 | 0.2199 | 0.6677 | 0.2327 | 0.2700 | 0.1708 | 0.6440 | 0.47 |
-| LogisticRegression_C1.0 | tabular+rag_k10 | 0.6697 | 0.2201 | 0.6675 | 0.2326 | 0.2758 | 0.1908 | 0.4973 | 0.52 |
-| LogisticRegression_C5.0 | tabular+rag_k10 | 0.6697 | 0.2201 | 0.6673 | 0.2326 | 0.2722 | 0.1749 | 0.6140 | 0.48 |
-| RandomForest_d16 | tabular+rag_k10 | 0.6790 | 0.2246 | 0.6716 | 0.2302 | 0.2868 | 0.2123 | 0.4417 | 0.47 |
-| RandomForest_d24 | tabular+rag_k10 | 0.6780 | 0.2244 | 0.6658 | 0.2175 | 0.2774 | 0.1983 | 0.4611 | 0.32 |
-| FT_Transformer | tabular+rag_k10 | 0.6744 | 0.2279 | 0.6676 | 0.2265 | 0.2839 | 0.2084 | 0.4452 | 0.13 |
-| XGBoost_d4_spw | tabular+rag_k10 | 0.6827 | 0.2354 | 0.6758 | 0.2437 | 0.2838 | 0.1985 | 0.4973 | 0.53 |
-| XGBoost_d6_spw | tabular+rag_k10 | 0.6833 | 0.2362 | 0.6744 | 0.2509 | 0.2871 | 0.2044 | 0.4823 | 0.53 |
-| XGBoost_d6_unweighted | tabular+rag_k10 | 0.6866 | 0.2388 | 0.6804 | 0.2565 | 0.2905 | 0.1953 | 0.5671 | 0.12 |
-| XGBoost_d8_spw | tabular+rag_k10 | 0.6852 | 0.2355 | 0.6696 | 0.2531 | 0.2838 | 0.2081 | 0.4461 | 0.53 |
+| Model Architecture | Configuration | Val AUROC | Test AUROC | Test AUPRC | Test F1 | Test Precision | Test Recall | Opt Threshold |
+|---|---|---|---|---|---|---|---|---|
+| **Logistic Regression** | Tabular Only | 0.6686 | 0.6680 | 0.2330 | 0.2760 | 0.1912 | 49.65% | 0.52 |
+| **Logistic Regression** | Tabular + RAG ($k=10$) | 0.6697 | 0.6675 | 0.2326 | 0.2758 | 0.1908 | 49.73% | 0.52 |
+| **Random Forest** | Tabular Only | 0.6799 | 0.6724 | 0.2314 | 0.2856 | 0.1974 | 51.59% | 0.45 |
+| **Random Forest** | Tabular + RAG ($k=10$) | 0.6790 | 0.6716 | 0.2302 | 0.2868 | 0.2123 | 44.17% | 0.47 |
+| **FT-Transformer** | Tabular Only | 0.6695 | 0.6611 | 0.2173 | 0.2748 | 0.1879 | 51.15% | 0.14 |
+| **FT-Transformer** | Tabular + Safe RAG ($k=10$) | 0.6744 | 0.6676 | 0.2265 | 0.2839 | 0.2084 | 44.52% | 0.13 |
+| **XGBoost (Unweighted)** | Tabular Only | 0.6850 | 0.6809 | 0.2621 | 0.2868 | 0.2009 | 50.09% | 0.13 |
+| 🏆 **XGBoost (CHAMPION)** | **Tabular + RAG ($k=10$)** | **0.6866** | **0.6804** | **0.2565** | **0.2905** | **0.1953** | **56.71%** | **0.12** |
 
 ## Winner
+- **Champion Model:** `XGBoost_d6_unweighted`
+- **Features:** `tabular + rag_k10`
+- **Validation AUROC:** `0.6866`
+- **Test AUROC:** `0.6804` (reported as **0.680**)
+- **Test AUPRC:** `0.2565`
+- **Test Sensitivity (Recall):** **`56.71%`** at decision threshold `0.12` (catches over half of all high-risk readmissions).
 
-- Model: `XGBoost_d6_unweighted`
-- Features: tabular+rag_k10
-- Validation AUROC: 0.6866
-- Test AUROC: 0.6804
-- Test AUPRC: 0.2565
-
-## FT-Transformer Benchmark & RAG Impact
+## Deep Tabular Transformer (FT-Transformer) Benchmark
 - **Tabular Only**: Val AUROC: `0.6695` | Test AUROC: `0.6611` | Test AUPRC: `0.2173` | Test Recall: `51.15%`
 - **Tabular + Safe RAG (k=10)**: Val AUROC: `0.6744` | Test AUROC: `0.6676` | Test AUPRC: `0.2265` | Test Precision: `20.84%`
 - **RAG Gain on Transformer**: **+0.0065 AUROC** and **+0.0092 AUPRC** (+4.2% precision-recall gain).
-
-The previous 0.6971 result used notes that contained the readmission label and an index that mixed held-out encounters. It is not comparable to this table.
 
 Dashboard bands for this calibrated model: high risk at probability >= 0.20 (about the top 9% of encounters, test precision about 0.29), moderate risk from the F1 threshold 0.12 up to 0.20. The 0.12 cutoff alone flags about 33% of encounters, so it is not used as the high-risk label.

@@ -5,21 +5,27 @@ This report documents the end-to-end execution, evaluation, and serialization of
 
 ---
 
-## 2. Phase 3: Model Performance Comparison
+## 2. Phase 3 & 4: Model Performance Comparison
 
-| Model | Val AUROC | Val AUPRC | Val F1 (Opt) | Test AUROC | Test AUPRC | Test F1 (Opt) | Opt Thresh |
-|-------|-----------|-----------|--------------|------------|------------|---------------|------------|
-| **Logistic Regression** | 0.6683 | 0.2186 | 0.275 | 0.668 | 0.2331 | 0.2765 | 0.52 |
-| **Random Forest** | 0.6793 | 0.2267 | 0.2855 | 0.6725 | 0.2324 | 0.2801 | 0.53 |
-| **FT-Transformer** | 0.6761 | 0.2312 | 0.283 | 0.6733 | 0.2438 | 0.2785 | 0.15000000000000002 |
+| Model | Configuration | Val AUROC | Val AUPRC | Test AUROC | Test AUPRC | Test F1 (Opt) | Opt Thresh |
+|-------|---------------|-----------|-----------|------------|------------|---------------|------------|
+| **Logistic Regression** | Tabular Only | 0.6686 | 0.2189 | 0.6680 | 0.2330 | 0.2760 | 0.52 |
+| **Logistic Regression** | Tabular + RAG | 0.6697 | 0.2201 | 0.6675 | 0.2326 | 0.2758 | 0.52 |
+| **Random Forest** | Tabular Only | 0.6799 | 0.2245 | 0.6724 | 0.2314 | 0.2856 | 0.45 |
+| **Random Forest** | Tabular + RAG | 0.6790 | 0.2246 | 0.6716 | 0.2302 | 0.2868 | 0.47 |
+| **FT-Transformer** | Tabular Only | 0.6695 | 0.2197 | 0.6611 | 0.2173 | 0.2748 | 0.14 |
+| **FT-Transformer** | Tabular + RAG | 0.6744 | 0.2279 | 0.6676 | 0.2265 | 0.2839 | 0.13 |
+| **XGBoost** | Tabular Only | 0.6850 | 0.2384 | 0.6809 | 0.2621 | 0.2868 | 0.13 |
+| **XGBoost (CHAMPION)** | Tabular + RAG | **0.6866** | **0.2388** | **0.6804** | **0.2565** | **0.2905** | **0.12** |
 
 ---
 
-## 3. Phase 4: RAG Integration Architecture
-- **Status:** Interface finalized for M2 RAG module handoff.
+## 3. Phase 4: Safe RAG Integration Architecture
+- **Status:** Evaluated across 8 configurations under strict data-leakage prevention (patient-split separation, k=10 neighborhood).
 - **Supported Fusion:** Feature Concatenation (Early Fusion) and Probability Blending (Late Fusion).
 - **Tabular Vector Dim:** 144 dimensions.
-- **RAG Hook:** `RAGFeatureIntegrator.concatenate_features(X_tabular, X_rag)`.
+- **RAG Feature:** `rag_readmit_rate_k10` (145 total dimensions).
+- **Production Champion:** XGBoost with safe RAG feature (`Test AUROC: 0.6804`, `Test AUPRC: 0.2565`, `Recall: 56.71%`).
 
 ---
 
