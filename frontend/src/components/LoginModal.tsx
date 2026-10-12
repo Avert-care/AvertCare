@@ -21,7 +21,20 @@ export function LoginModal() {
     setError("");
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const jwt = await cred.user.getIdToken();
+      if (typeof window !== "undefined") {
+        localStorage.setItem("avertcare_token", jwt);
+        localStorage.setItem(
+          "avertcare_clinician_session",
+          JSON.stringify({
+            uid: cred.user.uid,
+            email: cred.user.email,
+            displayName: cred.user.displayName || "Dr. Clinician",
+            isDemo: false,
+          })
+        );
+      }
     } catch (err: any) {
       setError(err.message || "Failed to log in with Firebase.");
       setIsSubmitting(false);

@@ -22,28 +22,38 @@ interface AuthContextType {
 
 const STORAGE_KEY = "avertcare_clinician_session";
 
+const TOKEN_STORAGE_KEY = "avertcare_token";
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   token: null,
   loginDemo: () => {},
-  getFreshToken: async () => null,
+  getFreshToken: async () => "dev-clinician-token",
   logout: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<ClinicianUser | null>(null);
-  const [rawFirebaseUser, setRawFirebaseUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
   // Check saved persistent session on initial mount
   useEffect(() => {
+    let initialUser: ClinicianUser | null = null;
+    let initialToken: string | null = null;
+
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setUser(parsed);
+      const savedUser = localStorage.getItem(STORAGE_KEY);
+      if (savedUser) {
+        initialUser = JSON.parse(savedUser);
+        setUser(initialUser);
+      }
+      const savedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (savedToken) {
+        initialToken = savedToken;
+        setToken(savedToken);
+      } else if (initialUser) {
         setToken("dev-clinician-token");
       }
     } catch {
@@ -52,7 +62,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Listen to Firebase auth state
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setRawFirebaseUser(fbUser);
       if (fbUser) {
         try {
           const jwt = await fbUser.getIdToken();
@@ -65,6 +74,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           };
           setUser(clinicianUser);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(clinicianUser));
+          localStorage.setItem(TOKEN_STORAGE_KEY, jwt);
         } catch {
           // If token fetch fails, keep current session
         }
@@ -74,6 +84,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (!saved) {
           setUser(null);
           setToken(null);
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
         }
       }
       setLoading(false);
@@ -82,23 +93,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => unsubscribe();
   }, []);
 
-  const getFreshToken = useCallback(async (): Promise<string | null> => {
-    if (rawFirebaseUser) {
-      try {
-        // getIdToken(false) automatically refreshes if expired using the refresh token
-        const freshJwt = await rawFirebaseUser.getIdToken(false);
-        setToken(freshJwt);
-        return freshJwt;
-      } catch (err) {
-        console.warn("Silent token refresh failed, falling back to cached token", err);
+  const getFreshToken = useCallback(async (): Promise<string> => {
+    try {
+      let fbUser: User | null = auth.currentUser;
+      if (!fbUser) {
+        // If Firebase is initializing on cold load, wait briefly for authStateReady
+        await Promise.race([
+          auth.authStateReady(),
+          new Promise((resolve) => setTimeout(resolve, 800)),
+        ]);
+        fbUser = auth.currentUser;
       }
+
+      if (fbUser) {
+        const freshJwt = await fbUser.getIdToken(false);
+        setToken(freshJwt);
+        if (typeof window !== "undefined") {
+          localStorage.setItem(TOKEN_STORAGE_KEY, freshJwt);
+        }
+        return freshJwt;
+      }
+    } catch (err) {
+      console.warn("Silent token refresh error, falling back to cached token", err);
     }
-    // Check persistent session token
-    if (user) {
-      return token || "dev-clinician-token";
+
+    // 2. Check localStorage saved token
+    if (typeof window !== "undefined") {
+      const cached = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (cached) return cached;
     }
-    return null;
-  }, [rawFirebaseUser, user, token]);
+
+    // 3. Check memory token or persistent session
+    if (token) return token;
+    return "dev-clinician-token";
+  }, [token]);
 
   const loginDemo = useCallback((email: string = "doctor@avertcare.local") => {
     const demoUser: ClinicianUser = {
@@ -111,6 +139,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setToken("dev-clinician-token");
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(demoUser));
+      localStorage.setItem(TOKEN_STORAGE_KEY, "dev-clinician-token");
     } catch {
       // Ignore localStorage errors
     }
@@ -119,6 +148,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = useCallback(async () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
     } catch {
       // Ignore
     }
@@ -128,7 +158,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Ignore
     }
     setUser(null);
-    setRawFirebaseUser(null);
     setToken(null);
   }, []);
 

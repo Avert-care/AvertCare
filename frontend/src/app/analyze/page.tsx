@@ -396,7 +396,7 @@ function AnalyzeContent() {
   const [ragError, setRagError] = useState<string | null>(null);
   const [censusPatients, setCensusPatients] = useState<any[]>([]);
 
-  const { getFreshToken } = useAuth();
+  const { user, getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
   const noteTooShort = patient.clinical_note.trim().length < 10;
 
@@ -405,7 +405,12 @@ function AnalyzeContent() {
     prewarmBackend();
     async function fetchCensus() {
       try {
-        const res = await fetch(`${API_URL}/api/patients/pending`);
+        const token = await getFreshToken();
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        };
+        const res = await fetch(`${API_URL}/api/patients/pending`, { headers });
         if (res.ok) {
           const list = await res.json();
           setCensusPatients(list);
@@ -415,7 +420,7 @@ function AnalyzeContent() {
       }
     }
     fetchCensus();
-  }, [API_URL]);
+  }, [API_URL, user]);
 
   // Auto-fill chart if patient_id query param is present
   useEffect(() => {

@@ -200,7 +200,7 @@ export default function AlertsPage() {
   const [selectedRecord, setSelectedRecord] = useState<AnalyzedRecord | null>(null);
   const [search, setSearch] = useState("");
 
-  const { getFreshToken } = useAuth();
+  const { user, getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
 
   useEffect(() => {
@@ -211,8 +211,10 @@ export default function AlertsPage() {
     setLoading(true);
     try {
       const token = await getFreshToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      };
 
       const res = await fetch(`${API_URL}/api/patients/analyzed`, { headers });
       if (res.ok) {
@@ -228,7 +230,7 @@ export default function AlertsPage() {
 
   useEffect(() => {
     fetchAnalyzedPatients();
-  }, []);
+  }, [user]);
 
   const criticalCount = analyzedList.filter((r) => r.risk_score > 0.5).length;
   const elevatedCount = analyzedList.filter((r) => r.risk_score > 0.2 && r.risk_score <= 0.5).length;

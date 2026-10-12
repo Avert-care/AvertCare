@@ -61,7 +61,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedPatient, setSelectedPatient] = useState<any | null>(null);
 
-  const { getFreshToken } = useAuth();
+  const { user, getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
 
   useEffect(() => {
@@ -72,8 +72,9 @@ export default function DashboardPage() {
     setLoading(true);
     try {
       const token = await getFreshToken();
-      const headers: Record<string, string> = {};
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const headers: Record<string, string> = {
+        "Authorization": `Bearer ${token}`,
+      };
 
       const [resPending, resAnalyzed] = await Promise.allSettled([
         fetch(`${API_URL}/api/patients/pending`, { headers }),
@@ -95,7 +96,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user]);
 
   const highRiskCount = analyzed.filter((a) => a.risk_score > 0.5).length;
   const elevatedRiskCount = analyzed.filter((a) => a.risk_score > 0.2 && a.risk_score <= 0.5).length;

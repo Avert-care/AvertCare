@@ -82,7 +82,7 @@ export default function WardCensusPage() {
   const [filterDiag, setFilterDiag] = useState<string>("All");
   const [selectedPatient, setSelectedPatient] = useState<PatientProfile | null>(null);
 
-  const { getFreshToken } = useAuth();
+  const { user, getFreshToken } = useAuth();
   const API_URL = getApiBaseUrl();
 
   useEffect(() => {
@@ -94,8 +94,10 @@ export default function WardCensusPage() {
     setError(null);
     try {
       const token = await getFreshToken();
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      };
 
       const res = await fetch(`${API_URL}/api/patients/pending`, { headers });
       if (!res.ok) {
@@ -113,7 +115,7 @@ export default function WardCensusPage() {
 
   useEffect(() => {
     fetchPendingPatients();
-  }, []);
+  }, [user]);
 
   const filteredPatients = patients.filter((patient) => {
     const matchesSearch =
