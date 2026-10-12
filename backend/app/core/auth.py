@@ -8,10 +8,9 @@ Dependency injected via FastAPI — routes stay clean.
 from __future__ import annotations
 
 import logging
-import time
 
 import firebase_admin
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
 from jose import jwt
